@@ -1,0 +1,69 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+import numpy as np
+
+from piece_editor.domain import PieceDef, PieceInstance
+from piece_editor.library import PieceLibrary
+from piece_editor.mesh import load_piece_mesh
+from piece_editor.renderer3d import build_grid_lines, light_view_projection_matrix, model_matrix
+from piece_editor.scene import Scene
+
+
+def test_existing_binary_fbx_loads_as_real_triangle_mesh() -> None:
+    library = PieceLibrary.load(Path(__file__).resolve().parents[1] / "library")
+    definition = library.pieces["box_1x1x1"]
+
+    mesh = load_piece_mesh(definition)
+
+    assert mesh.source.endswith("Box_1x1x1.fbx")
+    assert mesh.positions.shape[0] > 36
+    assert mesh.positions.shape == mesh.normals.shape
+    assert np.all(np.isfinite(mesh.positions))
+    assert np.allclose(mesh.positions.min(axis=0), (0, 0, 0))
+    assert np.allclose(mesh.positions.max(axis=0), definition.size)
+
+
+def test_missing_mesh_uses_cuboid_fallback() -> None:
+    definition = PieceDef("missing", (2, 3, 1), mesh="not-there.glb")
+
+    mesh = load_piece_mesh(definition)
+
+    assert mesh.source == "generated cuboid"
+    assert mesh.positions.shape == (36, 3)
+    assert np.allclose(mesh.positions.max(axis=0), definition.size)
+
+
+def test_rotated_model_matrix_stays_inside_scene_footprint() -> None:
+    definition = PieceDef("bar", (2, 1, 1))
+    local_corners = np.array(
+        ((0, 0, 0, 1), (2, 0, 0, 1), (0, 1, 0, 1), (2, 1, 1, 1)),
+        dtype=np.float32,
+    )
+    piece = PieceInstance("bar", (-3, 4, 2), 90, 0)
+
+    world = (model_matrix(piece, definition) @ local_corners.T).T[:, :3]
+
+    assert np.allclose(world.min(axis=0), (-3, 4, 2))
+    assert np.allclose(world.max(axis=0), (-2, 6, 3))
+
+
+def test_3d_grid_contains_finite_colored_line_vertices() -> None:
+    scene = Scene({"cube": PieceDef("cube", (1, 1, 1))})
+
+    vertices = build_grid_lines(scene)
+
+    assert vertices.ndim == 2 and vertices.shape[1] == 6
+    assert vertices.shape[0] % 2 == 0
+    assert np.all(np.isfinite(vertices))
+
+
+def test_directional_shadow_matrix_is_finite_and_invertible() -> None:
+    scene = Scene({"cube": PieceDef("cube", (1, 1, 1))})
+
+    matrix = light_view_projection_matrix(scene)
+
+    assert matrix.shape == (4, 4)
+    assert np.all(np.isfinite(matrix))
+    assert not np.isclose(np.linalg.det(matrix), 0.0)

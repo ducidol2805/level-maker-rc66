@@ -1,0 +1,9 @@
+{
+  "id": "box_1x1x1",
+  "size": [1, 1, 1],
+  "pivot": [0, 0, 0],
+  "mesh": "../../models/Box_1x1x1.fbx",
+  "allowed_rotations": [0, 90, 180, 270],
+  "category": "Blocks",
+  "tags": ["block", "cube", "basic"]
+}
