@@ -314,7 +314,14 @@ class ModernGLSceneRenderer:
     def resize(self, width: int, height: int, pixel_ratio: float = 1.0) -> None:
         actual_width = max(1, round(width * pixel_ratio))
         actual_height = max(1, round(height * pixel_ratio))
-        self.viewport_size = (actual_width, actual_height)
+        new_size = (actual_width, actual_height)
+        if new_size != self.viewport_size:
+            # QOpenGLWidget may resize the storage behind the same framebuffer
+            # object name. A detected ModernGL framebuffer caches its original
+            # dimensions, so force detection again after every physical resize.
+            self.qt_framebuffer = None
+            self.qt_framebuffer_id = None
+        self.viewport_size = new_size
         self.context.viewport = (0, 0, actual_width, actual_height)
 
     def reset_camera(self, scene: Scene) -> None:
@@ -434,7 +441,11 @@ class ModernGLSceneRenderer:
         return self._cached_batches
 
     def _bind_qt_framebuffer(self, framebuffer_id: int) -> None:
-        if self.qt_framebuffer is None or self.qt_framebuffer_id != framebuffer_id:
+        if (
+            self.qt_framebuffer is None
+            or self.qt_framebuffer_id != framebuffer_id
+            or self.qt_framebuffer.size != self.viewport_size
+        ):
             self.qt_framebuffer = self.context.detect_framebuffer(framebuffer_id)
             self.qt_framebuffer_id = framebuffer_id
         self.qt_framebuffer.use()

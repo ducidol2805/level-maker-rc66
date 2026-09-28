@@ -5,11 +5,12 @@ from pathlib import Path
 
 from PIL import Image
 from PIL.ImageQt import ImageQt
-from PySide6.QtCore import QSignalBlocker, Qt, Signal
-from PySide6.QtGui import QAction, QColor, QDragEnterEvent, QDropEvent, QKeySequence, QPixmap
+from PySide6.QtCore import QSettings, QSize, QSignalBlocker, Qt, Signal
+from PySide6.QtGui import QAction, QColor, QDragEnterEvent, QDropEvent, QIcon, QKeySequence, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
+    QButtonGroup,
     QCheckBox,
     QComboBox,
     QDialog,
@@ -27,13 +28,12 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
-    QScrollArea,
     QSizePolicy,
     QSlider,
     QSpinBox,
     QSplitter,
     QTabWidget,
-    QToolBar,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -412,80 +412,235 @@ class AIBuildPanel(QWidget):
         self.generate_requested.emit((self.drop.path, self.settings()))
 
 
-class MainWindow(QMainWindow):
-    def __init__(self, library_path: str | Path) -> None:
+class ResponsiveToolButton(QToolButton):
+    def resizeEvent(self, event) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        icon_side = max(18, min(42, int(min(self.width(), self.height()) * 0.42)))
+        self.setIconSize(QSize(icon_side, icon_side))
+
+
+class ToolboxPanel(QWidget):
+    def __init__(self) -> None:
         super().__init__()
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(5, 5, 5, 5)
+        outer.setSpacing(5)
+        title = QLabel("Toolbox")
+        title.setStyleSheet("font-weight: 600;")
+        outer.addWidget(title)
+        self.content = QWidget()
+        self.grid = QGridLayout(self.content)
+        self.grid.setContentsMargins(2, 2, 2, 2)
+        self.grid.setHorizontalSpacing(6)
+        self.grid.setVerticalSpacing(6)
+        for column in range(4):
+            self.grid.setColumnStretch(column, 1)
+        self.grid.setRowStretch(0, 1)
+        self.grid.setRowStretch(1, 1)
+        outer.addWidget(self.content, 1)
+        self.buttons: dict[str, QToolButton] = {}
+        self.setMinimumHeight(150)
+
+    def add_button(
+        self,
+        key: str,
+        text: str,
+        icon,
+        callback,
+        row: int,
+        column: int,
+        *,
+        checkable: bool = False,
+        checked: bool = False,
+    ) -> QToolButton:
+        button = ResponsiveToolButton()
+        button.setText(text)
+        button.setIcon(icon)
+        button.setIconSize(QSize(36, 36))
+        button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
+        button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        button.setMinimumSize(38, 48)
+        button.setCheckable(checkable)
+        button.setChecked(checked)
+        button.setStyleSheet(
+            """
+            QToolButton {
+                background: #303844;
+                border: 1px solid #4d5969;
+                border-radius: 10px;
+                padding: 4px 2px;
+                font-size: 9px;
+            }
+            QToolButton:hover { background: #3b4655; border-color: #69798e; }
+            QToolButton:pressed { background: #245f99; }
+            QToolButton:checked { background: #2d78c4; border: 2px solid #88c4f5; }
+            """
+        )
+        button.clicked.connect(callback)
+        self.grid.addWidget(button, row, column)
+        self.buttons[key] = button
+        return button
+
+    def add_layer_control(self, spin: QSpinBox) -> None:
+        container = QWidget()
+        layout = QHBoxLayout(container)
+        layout.setContentsMargins(4, 4, 4, 4)
+        layout.addWidget(QLabel("Layer Z"))
+        layout.addWidget(spin, 1)
+        self.grid.addWidget(container, 2, 0, 1, 4)
+
+class ViewportPanel(QFrame):
+    hide_requested = Signal()
+
+    def __init__(self, title: str, viewport: EditorViewport) -> None:
+        super().__init__()
+        self.viewport = viewport
+        self.setFrameShape(QFrame.Shape.StyledPanel)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        header = QFrame()
+        header.setStyleSheet("background: #1d2229; border-bottom: 1px solid #3a4350;")
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(8, 4, 5, 4)
+        label = QLabel(title)
+        label.setStyleSheet("font-weight: 600;")
+        header_layout.addWidget(label)
+        header_layout.addStretch()
+        hide_button = QToolButton()
+        hide_button.setText("×")
+        hide_button.setToolTip(f"Hide {title}")
+        hide_button.clicked.connect(self.hide_requested.emit)
+        header_layout.addWidget(hide_button)
+        layout.addWidget(header)
+        layout.addWidget(viewport, 1)
+
+
+class MainWindow(QMainWindow):
+    def __init__(
+        self,
+        library_path: str | Path,
+        *,
+        settings: QSettings | None = None,
+        persist_ui_state: bool = True,
+    ) -> None:
+        super().__init__()
+        self.ui_settings = settings if settings is not None else QSettings()
+        self.persist_ui_state = persist_ui_state
         self.setWindowTitle("Piece-Based Block Editor")
-        self.resize(1320, 820)
+        self.resize(1600, 900)
         self.project_path: Path | None = None
         self.dirty = False
         self.palette = DEFAULT_PALETTE
         self.library_path = Path(library_path).resolve()
         self.library = PieceLibrary.load(self.library_path)
         self.scene = Scene(self.library.pieces)
-        self.viewport = EditorViewport(self.scene, self.palette)
+        self.front_viewport = EditorViewport(self.scene, self.palette, allow_3d=False)
+        self.front_viewport.set_view_mode(ViewMode.FRONT)
+        self.view3d = EditorViewport(self.scene, self.palette, read_only=True)
+        self.view3d.set_view_mode(ViewMode.PERSPECTIVE)
+        self.viewport = self.front_viewport
+        self._syncing_selection = False
         self.library_panel = PieceLibraryPanel()
         self.library_panel.set_library(self.library)
         self.properties = PropertiesPanel(self.palette)
         self.properties.set_scene_bounds(self.scene)
         self.palette_panel = PalettePanel(self.palette)
         self.ai_panel = AIBuildPanel()
+        self.toolbox_panel = ToolboxPanel()
+        self._build_toolbox()
         self._build_layout()
-        self._build_toolbar()
         self._build_menu()
         self._connect()
+        if self.persist_ui_state:
+            self._restore_ui_state()
         self._show_library_status()
 
     def _build_layout(self) -> None:
         self.left_splitter = QSplitter(Qt.Orientation.Vertical)
         self.left_splitter.setChildrenCollapsible(False)
+        self.left_splitter.addWidget(self.toolbox_panel)
         self.left_splitter.addWidget(self.palette_panel)
         self.left_splitter.addWidget(self.library_panel)
-        self.left_splitter.setSizes([150, 500])
-        horizontal = QSplitter(Qt.Orientation.Horizontal)
-        horizontal.addWidget(self.left_splitter)
-        horizontal.addWidget(self.viewport)
-        horizontal.addWidget(self.properties)
-        horizontal.setSizes([250, 810, 260])
+        self.left_splitter.setStretchFactor(0, 0)
+        self.left_splitter.setStretchFactor(1, 0)
+        self.left_splitter.setStretchFactor(2, 1)
+        self.left_splitter.setSizes([240, 130, 280])
+
+        self.front_panel = ViewportPanel("Front Editor", self.front_viewport)
+        self.view3d_panel = ViewportPanel("3D Preview", self.view3d)
+        self.front_panel.hide_requested.connect(lambda: self._set_view_panel_visible("front", False))
+        self.view3d_panel.hide_requested.connect(lambda: self._set_view_panel_visible("3d", False))
+        self.view_splitter = QSplitter(Qt.Orientation.Horizontal)
+        self.view_splitter.setChildrenCollapsible(False)
+        self.view_splitter.addWidget(self.front_panel)
+        self.view_splitter.addWidget(self.view3d_panel)
+        self.view_splitter.setSizes([520, 520])
+
+        self.main_splitter = QSplitter(Qt.Orientation.Horizontal)
+        self.main_splitter.setChildrenCollapsible(False)
+        self.main_splitter.addWidget(self.left_splitter)
+        self.main_splitter.addWidget(self.view_splitter)
+        self.main_splitter.addWidget(self.properties)
+        self.main_splitter.setStretchFactor(0, 0)
+        self.main_splitter.setStretchFactor(1, 1)
+        self.main_splitter.setStretchFactor(2, 0)
+        self.main_splitter.setSizes([250, 1040, 260])
         tabs = QTabWidget()
         tabs.addTab(self.ai_panel, "AI Build")
-        vertical = QSplitter(Qt.Orientation.Vertical)
-        vertical.addWidget(horizontal)
-        vertical.addWidget(tabs)
-        vertical.setSizes([520, 300])
-        self.setCentralWidget(vertical)
+        self.workspace_splitter = QSplitter(Qt.Orientation.Vertical)
+        self.workspace_splitter.addWidget(self.main_splitter)
+        self.workspace_splitter.addWidget(tabs)
+        self.workspace_splitter.setSizes([520, 300])
+        self.setCentralWidget(self.workspace_splitter)
 
-    def _build_toolbar(self) -> None:
-        toolbar = QToolBar("Editor Tools")
-        toolbar.setMovable(False)
-        self.addToolBar(toolbar)
-        self.tool_actions: dict[EditorTool, QAction] = {}
-        for tool in EditorTool:
-            action = QAction(tool.value, self)
-            action.setCheckable(True)
-            action.triggered.connect(lambda checked=False, selected=tool: self._set_tool(selected))
-            toolbar.addAction(action)
-            self.tool_actions[tool] = action
+    def _build_toolbox(self) -> None:
+        icon_dir = Path(__file__).resolve().parent.parent / "tool_icon"
+        self.toolbox_icon_paths = {
+            "place": icon_dir / "tool_brush.png",
+            "erase": icon_dir / "tool_eraser.png",
+            "move": icon_dir / "tool_move.png",
+            "duplicate": icon_dir / "tool_dup.png",
+            "select": icon_dir / "tool_select.png",
+            "box": icon_dir / "tool_box.png",
+            "mirror": icon_dir / "tool_flip_H.png",
+        }
+        self.toolbox_icons = {key: QIcon(str(path)) for key, path in self.toolbox_icon_paths.items()}
+        icons = self.toolbox_icons
+        self.tool_group = QButtonGroup(self)
+        self.tool_group.setExclusive(True)
+        self.tool_actions: dict[EditorTool, QToolButton] = {}
+
+        def add_tool(tool: EditorTool, key: str, title: str, row: int, column: int) -> None:
+            button = self.toolbox_panel.add_button(
+                key,
+                title,
+                icons[key],
+                lambda checked=False, selected=tool: self._set_tool(selected),
+                row,
+                column,
+                checkable=True,
+                checked=tool == EditorTool.PLACE,
+            )
+            self.tool_group.addButton(button)
+            self.tool_actions[tool] = button
+
+        add_tool(EditorTool.PLACE, "place", "Brush", 0, 0)
+        add_tool(EditorTool.ERASE, "erase", "Eraser", 0, 1)
+        add_tool(EditorTool.MOVE, "move", "Move", 0, 2)
+        self.toolbox_panel.add_button(
+            "duplicate", "Duplicate", icons["duplicate"], self.viewport.duplicate_selection, 0, 3
+        )
+        add_tool(EditorTool.SELECT, "select", "Select", 1, 0)
+        add_tool(EditorTool.BOX_SELECT, "box", "Box Select", 1, 1)
+        self.toolbox_panel.add_button(
+            "mirror", "Mirror", icons["mirror"], self.viewport.mirror_selection, 1, 2
+        )
         self.tool_actions[EditorTool.PLACE].setChecked(True)
-        toolbar.addSeparator()
-        for title, callback in (
-            ("Delete", self.viewport.delete_selection),
-            ("Rotate Left", lambda: self.viewport.rotate_selection(-90)),
-            ("Rotate Right", lambda: self.viewport.rotate_selection(90)),
-            ("Duplicate", self.viewport.duplicate_selection),
-            ("Mirror X", self.viewport.mirror_selection),
-        ):
-            toolbar.addAction(title, callback)
-        toolbar.addSeparator()
-        toolbar.addWidget(QLabel("Layer "))
-        layer = QSpinBox()
-        layer.setRange(0, self.scene.bounds[2] - 1)
-        layer.valueChanged.connect(self.viewport.set_layer)
-        toolbar.addWidget(layer)
-        toolbar.addSeparator()
-        toolbar.addAction("Front", lambda: self.viewport.set_view_mode(ViewMode.FRONT))
-        toolbar.addAction("Perspective", lambda: self.viewport.set_view_mode(ViewMode.PERSPECTIVE))
-        toolbar.addAction("Center", self.viewport.center_view)
+        self.layer_spin = QSpinBox()
+        self.layer_spin.setRange(0, self.scene.bounds[2] - 1)
+        self.layer_spin.valueChanged.connect(self.viewport.set_layer)
+        self.toolbox_panel.add_layer_control(self.layer_spin)
 
     def _build_menu(self) -> None:
         file_menu = self.menuBar().addMenu("&File")
@@ -517,20 +672,29 @@ class MainWindow(QMainWindow):
         delete.setShortcut(QKeySequence.StandardKey.Delete)
 
         view_menu = self.menuBar().addMenu("&View")
-        front = view_menu.addAction("Front", lambda: self.viewport.set_view_mode(ViewMode.FRONT))
-        front.setShortcut(QKeySequence("F"))
-        perspective = view_menu.addAction("Perspective", lambda: self.viewport.set_view_mode(ViewMode.PERSPECTIVE))
-        perspective.setShortcut(QKeySequence("P"))
-        center = view_menu.addAction("Center on Origin", self.viewport.center_view)
+        self.front_panel_action = view_menu.addAction("Show Front Panel")
+        self.front_panel_action.setCheckable(True)
+        self.front_panel_action.setChecked(True)
+        self.front_panel_action.setShortcut(QKeySequence("F"))
+        self.front_panel_action.toggled.connect(lambda visible: self._set_view_panel_visible("front", visible))
+        self.view3d_panel_action = view_menu.addAction("Show 3D Panel")
+        self.view3d_panel_action.setCheckable(True)
+        self.view3d_panel_action.setChecked(True)
+        self.view3d_panel_action.setShortcut(QKeySequence("P"))
+        self.view3d_panel_action.toggled.connect(lambda visible: self._set_view_panel_visible("3d", visible))
+        center = view_menu.addAction("Center Views", self._center_views)
         center.setShortcut(QKeySequence("H"))
 
     def _connect(self) -> None:
         self.library_panel.piece_selected.connect(self._select_piece)
         self.palette_panel.color_selected.connect(self.viewport.recolor_selection)
         self.properties.apply_requested.connect(lambda data: self.viewport.update_selected(**data))
-        self.viewport.selection_changed.connect(self._selection_changed)
-        self.viewport.scene_changed.connect(self._scene_changed)
-        self.viewport.status_message.connect(lambda text: self.statusBar().showMessage(text, 5000))
+        self.front_viewport.selection_changed.connect(lambda: self._selection_changed_from(self.front_viewport))
+        self.view3d.selection_changed.connect(lambda: self._selection_changed_from(self.view3d))
+        self.front_viewport.scene_changed.connect(lambda: self._scene_changed_from(self.front_viewport))
+        self.view3d.scene_changed.connect(lambda: self._scene_changed_from(self.view3d))
+        self.front_viewport.status_message.connect(lambda text: self.statusBar().showMessage(text, 5000))
+        self.view3d.status_message.connect(lambda text: self.statusBar().showMessage(text, 5000))
         self.ai_panel.generate_requested.connect(self._generate)
 
     def _set_tool(self, tool: EditorTool) -> None:
@@ -543,12 +707,79 @@ class MainWindow(QMainWindow):
         self._set_tool(EditorTool.PLACE)
         self.statusBar().showMessage(f"Active piece: {piece_id}", 3000)
 
-    def _selection_changed(self) -> None:
-        self.properties.show_selection(self.viewport.selected_pieces())
+    def _selection_changed_from(self, source: EditorViewport) -> None:
+        if self._syncing_selection:
+            return
+        self._syncing_selection = True
+        try:
+            target = self.view3d if source is self.front_viewport else self.front_viewport
+            target.selection = set(source.selection)
+            target.update()
+            self.properties.show_selection(source.selected_pieces())
+        finally:
+            self._syncing_selection = False
 
-    def _scene_changed(self) -> None:
+    def _selection_changed(self) -> None:
+        self._selection_changed_from(self.front_viewport)
+
+    def _scene_changed_from(self, source: EditorViewport) -> None:
+        target = self.view3d if source is self.front_viewport else self.front_viewport
+        target.update()
         self.dirty = True
         self._update_title()
+
+    def _scene_changed(self) -> None:
+        self._scene_changed_from(self.front_viewport)
+
+    def _center_views(self) -> None:
+        self.front_viewport.center_view()
+        self.view3d.center_view()
+
+    def _set_view_panel_visible(self, panel_name: str, visible: bool) -> None:
+        if not hasattr(self, "front_panel"):
+            return
+        if panel_name == "front":
+            panel = self.front_panel
+            action = getattr(self, "front_panel_action", None)
+        else:
+            panel = self.view3d_panel
+            action = getattr(self, "view3d_panel_action", None)
+        panel.setVisible(visible)
+        if action is not None and action.isChecked() != visible:
+            action.blockSignals(True)
+            action.setChecked(visible)
+            action.blockSignals(False)
+
+    def _restore_ui_state(self) -> None:
+        geometry = self.ui_settings.value("ui/main_window_geometry")
+        if geometry:
+            self.restoreGeometry(geometry)
+        splitters = {
+            "ui/main_splitter": self.main_splitter,
+            "ui/workspace_splitter": self.workspace_splitter,
+            "ui/left_splitter": self.left_splitter,
+            "ui/view_splitter": self.view_splitter,
+        }
+        for key, splitter in splitters.items():
+            state = self.ui_settings.value(key)
+            if state:
+                splitter.restoreState(state)
+        self._set_view_panel_visible(
+            "front", self.ui_settings.value("ui/front_panel_visible", True, type=bool)
+        )
+        self._set_view_panel_visible(
+            "3d", self.ui_settings.value("ui/3d_panel_visible", True, type=bool)
+        )
+
+    def _save_ui_state(self) -> None:
+        self.ui_settings.setValue("ui/main_window_geometry", self.saveGeometry())
+        self.ui_settings.setValue("ui/main_splitter", self.main_splitter.saveState())
+        self.ui_settings.setValue("ui/workspace_splitter", self.workspace_splitter.saveState())
+        self.ui_settings.setValue("ui/left_splitter", self.left_splitter.saveState())
+        self.ui_settings.setValue("ui/view_splitter", self.view_splitter.saveState())
+        self.ui_settings.setValue("ui/front_panel_visible", self.front_panel.isVisible())
+        self.ui_settings.setValue("ui/3d_panel_visible", self.view3d_panel.isVisible())
+        self.ui_settings.sync()
 
     def _update_title(self) -> None:
         name = self.project_path.name if self.project_path else "Untitled"
@@ -566,10 +797,13 @@ class MainWindow(QMainWindow):
         self.palette = load_default_palette()
         self.palette_panel.set_palette(self.palette)
         self.properties.set_palette(self.palette)
-        self.viewport.set_palette(self.palette)
+        self.front_viewport.set_palette(self.palette)
+        self.view3d.set_palette(self.palette)
         self.scene = Scene(self.library.pieces)
-        self.viewport.set_scene(self.scene)
+        self.front_viewport.set_scene(self.scene)
+        self.view3d.set_scene(self.scene)
         self.properties.set_scene_bounds(self.scene)
+        self.layer_spin.setRange(0, self.scene.bounds[2] - 1)
         self.project_path = None
         self.dirty = False
         self._update_title()
@@ -590,7 +824,8 @@ class MainWindow(QMainWindow):
         self.library_path = library.root
         self.scene.piece_defs = library.pieces
         self.library_panel.set_library(library)
-        self.viewport.update()
+        self.front_viewport.update()
+        self.view3d.update()
         self._show_library_status()
 
     def save_project(self) -> None:
@@ -640,9 +875,12 @@ class MainWindow(QMainWindow):
         self.library_panel.set_library(library)
         self.palette_panel.set_palette(palette)
         self.properties.set_palette(palette)
-        self.viewport.set_palette(palette)
-        self.viewport.set_scene(scene)
+        self.front_viewport.set_palette(palette)
+        self.view3d.set_palette(palette)
+        self.front_viewport.set_scene(scene)
+        self.view3d.set_scene(scene)
         self.properties.set_scene_bounds(scene)
+        self.layer_spin.setRange(0, scene.bounds[2] - 1)
         self.project_path = Path(path)
         self.dirty = False
         self._update_title()
@@ -717,6 +955,8 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event) -> None:  # noqa: N802
         if self._confirm_discard():
+            if self.persist_ui_state:
+                self._save_ui_state()
             event.accept()
         else:
             event.ignore()
@@ -727,14 +967,13 @@ def apply_dark_theme(app: QApplication) -> None:
     app.setStyleSheet(
         """
         QWidget { background: #252a32; color: #e5e8ec; }
-        QMainWindow, QMenuBar, QMenu, QToolBar { background: #1d2127; }
+        QMainWindow, QMenuBar, QMenu { background: #1d2127; }
         QLineEdit, QSpinBox, QComboBox, QListWidget, QTabWidget::pane {
             background: #1f242b; border: 1px solid #3b4350; padding: 3px;
         }
         QPushButton { background: #343c48; border: 1px solid #4a5565; padding: 5px 9px; }
         QPushButton:hover { background: #414c5b; }
         QPushButton:pressed { background: #2d78c4; }
-        QToolBar { spacing: 4px; border-bottom: 1px solid #343b45; }
         QToolButton:checked { background: #2d78c4; }
         QStatusBar { background: #1d2127; }
         """

@@ -7,7 +7,16 @@ from enum import Enum
 from PySide6.QtCore import QPoint, QPointF, QRectF, Qt, Signal
 from PySide6.QtGui import QColor, QKeyEvent, QMouseEvent, QPainter, QPen, QPolygonF, QWheelEvent
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
-from PySide6.QtWidgets import QButtonGroup, QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QButtonGroup,
+    QFrame,
+    QGridLayout,
+    QLabel,
+    QPushButton,
+    QSizePolicy,
+    QVBoxLayout,
+    QWidget,
+)
 
 from .domain import PaletteColor, PieceInstance
 from .renderer3d import ModernGLSceneRenderer, RenderStats
@@ -37,7 +46,8 @@ class RendererPanel(QFrame):
             QFrame#rendererPanel QComboBox, QFrame#rendererPanel QPushButton {
                 background: #303946;
                 border: 1px solid #566273;
-                padding: 4px 7px;
+                padding: 4px 2px;
+                font-size: 9px;
             }
             QFrame#rendererPanel QPushButton:checked {
                 background: #2d78c4;
@@ -52,52 +62,55 @@ class RendererPanel(QFrame):
         title = QLabel("3D Renderer")
         title.setStyleSheet("font-weight: 600; color: #f0f2f5;")
         layout.addWidget(title)
-        self.stats_label = QLabel("OBJ 0 → 0 cached  •  Tris 0  •  Draws 0")
+        self.stats_label = QLabel("OBJ 0 → 0 cached\nTris 0  •  Draws 0")
         self.stats_label.setStyleSheet("color: #c9d1dc;")
         layout.addWidget(self.stats_label)
         self.cache_label = QLabel("Cached tris 0")
         self.cache_label.setStyleSheet("color: #8f9bad;")
         layout.addWidget(self.cache_label)
-        shader_controls = QHBoxLayout()
-        shader_controls.setContentsMargins(0, 0, 0, 0)
-        shader_controls.setSpacing(3)
-        shader_controls.addWidget(QLabel("Quality"))
+        self.controls_grid = QGridLayout()
+        self.controls_grid.setContentsMargins(0, 0, 0, 0)
+        self.controls_grid.setHorizontalSpacing(3)
+        self.controls_grid.setVerticalSpacing(4)
+        for column in range(6):
+            self.controls_grid.setColumnStretch(column, 1)
+        self.controls_grid.addWidget(QLabel("Quality"), 0, 0, 1, 6)
         self.shader_group = QButtonGroup(self)
         self.shader_group.setExclusive(True)
         self.shader_buttons: dict[str, QPushButton] = {}
-        for label, mode in (("High", "pbr"), ("Low", "simple")):
+        for index, (label, mode) in enumerate((("High", "pbr"), ("Low", "simple"))):
             button = QPushButton(label)
+            button.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
             button.setCheckable(True)
             button.clicked.connect(lambda checked=False, selected=mode: self.shader_changed.emit(selected))
             self.shader_group.addButton(button)
             self.shader_buttons[mode] = button
-            shader_controls.addWidget(button, 1)
+            self.controls_grid.addWidget(button, 1, index * 3, 1, 3)
         self.shader_buttons["pbr"].setChecked(True)
-        layout.addLayout(shader_controls)
 
-        view_controls = QHBoxLayout()
-        view_controls.setContentsMargins(0, 0, 0, 0)
-        view_controls.setSpacing(3)
-        view_controls.addWidget(QLabel("View"))
+        self.controls_grid.addWidget(QLabel("View"), 2, 0, 1, 6)
         self.projection_group = QButtonGroup(self)
         self.projection_group.setExclusive(True)
         self.projection_buttons: dict[str, QPushButton] = {}
-        for label, mode in (("Perspective", "perspective"), ("Ortho", "orthographic"), ("Iso", "iso")):
+        for index, (label, mode) in enumerate(
+            (("Perspective", "perspective"), ("Ortho", "orthographic"), ("Iso", "iso"))
+        ):
             button = QPushButton(label)
+            button.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
             button.setCheckable(True)
             button.clicked.connect(lambda checked=False, selected=mode: self.projection_changed.emit(selected))
             self.projection_group.addButton(button)
             self.projection_buttons[mode] = button
-            view_controls.addWidget(button, 1)
+            self.controls_grid.addWidget(button, 3, index * 2, 1, 2)
         self.projection_buttons["perspective"].setChecked(True)
-        layout.addLayout(view_controls)
-        self.setFixedWidth(282)
+        layout.addLayout(self.controls_grid)
+        self.setFixedWidth(210)
         self.adjustSize()
 
     def update_stats(self, stats: RenderStats) -> None:
         self.stats_label.setText(
             f"OBJ {stats.source_objects:,} → {stats.cached_objects:,} cached"
-            f"  •  Tris {stats.triangles:,}  •  Draws {stats.draw_calls:,}"
+            f"\nTris {stats.triangles:,}  •  Draws {stats.draw_calls:,}"
         )
         self.cache_label.setText(f"Cached tris {stats.cached_triangles:,}")
 
@@ -117,6 +130,7 @@ class RendererPanel(QFrame):
 
 class EditorTool(str, Enum):
     PLACE = "Place"
+    ERASE = "Eraser"
     SELECT = "Select"
     MOVE = "Move"
     BOX_SELECT = "Box Select"
@@ -132,8 +146,18 @@ class EditorViewport(QOpenGLWidget):
     scene_changed = Signal()
     status_message = Signal(str)
 
-    def __init__(self, scene: Scene, palette: tuple[PaletteColor, ...], parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        scene: Scene,
+        palette: tuple[PaletteColor, ...],
+        parent: QWidget | None = None,
+        *,
+        allow_3d: bool = True,
+        read_only: bool = False,
+    ) -> None:
         super().__init__(parent)
+        self.allow_3d = allow_3d
+        self.read_only = read_only
         self.scene = scene
         self.history = SceneHistory(scene)
         self.palette = palette
@@ -168,12 +192,12 @@ class EditorViewport(QOpenGLWidget):
         self.renderer_panel.hide()
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.setMouseTracking(True)
-        self.setMinimumSize(500, 420)
+        self.setMinimumSize(320, 320)
 
     def resizeEvent(self, event) -> None:  # noqa: N802
         if self.offset.y() == 0:
             self.offset.setY(self.height() - 54.0)
-        panel_width = max(240, min(282, self.width() - 24))
+        panel_width = max(180, min(210, self.width() - 24))
         self.renderer_panel.setFixedWidth(panel_width)
         self.renderer_panel.adjustSize()
         self.renderer_panel.move(12, 12)
@@ -181,6 +205,8 @@ class EditorViewport(QOpenGLWidget):
         super().resizeEvent(event)
 
     def initializeGL(self) -> None:  # noqa: N802
+        if not self.allow_3d:
+            return
         try:
             self.renderer3d = ModernGLSceneRenderer()
             self.renderer3d.resize(self.width(), self.height(), self.devicePixelRatioF())
@@ -214,10 +240,16 @@ class EditorViewport(QOpenGLWidget):
 
     def set_tool(self, tool: EditorTool) -> None:
         self.tool = tool
-        self.setCursor(Qt.CursorShape.CrossCursor if tool == EditorTool.PLACE else Qt.CursorShape.ArrowCursor)
+        self.setCursor(
+            Qt.CursorShape.CrossCursor
+            if tool in (EditorTool.PLACE, EditorTool.ERASE)
+            else Qt.CursorShape.ArrowCursor
+        )
         self.update()
 
     def set_view_mode(self, mode: ViewMode) -> None:
+        if mode == ViewMode.PERSPECTIVE and not self.allow_3d:
+            return
         self.view_mode = mode
         self.renderer_panel.setVisible(mode == ViewMode.PERSPECTIVE)
         if mode == ViewMode.PERSPECTIVE:
@@ -256,8 +288,8 @@ class EditorViewport(QOpenGLWidget):
                 self.renderer3d.camera.pitch = 35.264
             self.status_message.emit("3D camera reset")
         else:
-            self.offset = QPointF(self.width() / 2.0, self.height() / 2.0)
-            self.status_message.emit("View centered on origin (0, 0, 0)")
+            self.offset = QPointF(self.width() / 2.0, self.height() - 54.0)
+            self.status_message.emit("View centered with origin near bottom")
         self.update()
 
     def set_layer(self, layer: int) -> None:
@@ -416,6 +448,10 @@ class EditorViewport(QOpenGLWidget):
             try:
                 painter.beginNativePainting()
                 native_painting = True
+                # Splitter restore and hide/show transitions do not reliably
+                # emit resizeGL on every Qt/driver combination. Sync the
+                # physical framebuffer size immediately before each 3D frame.
+                self.renderer3d.resize(self.width(), self.height(), self.devicePixelRatioF())
                 self.renderer3d.render(
                     self.scene,
                     self.palette,
@@ -604,6 +640,8 @@ class EditorViewport(QOpenGLWidget):
             return
         elif self.tool == EditorTool.PLACE:
             self._begin_paint_stroke(Qt.MouseButton.LeftButton, cell)
+        elif self.tool == EditorTool.ERASE:
+            self._begin_paint_stroke(Qt.MouseButton.LeftButton, cell)
         elif self.tool == EditorTool.BOX_SELECT:
             self.box_start = event.position().toPoint()
             self.box_end = self.box_start
@@ -723,18 +761,20 @@ class EditorViewport(QOpenGLWidget):
         self.update()
 
     def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802
-        if event.key() == Qt.Key.Key_Delete:
+        if event.key() == Qt.Key.Key_H:
+            self.center_view()
+        elif self.read_only:
+            super().keyPressEvent(event)
+        elif event.key() == Qt.Key.Key_Delete:
             self.delete_selection()
         elif event.key() == Qt.Key.Key_Q:
             self.rotate_selection(-90)
         elif event.key() == Qt.Key.Key_E:
             self.rotate_selection(90)
-        elif event.key() == Qt.Key.Key_F:
+        elif event.key() == Qt.Key.Key_F and self.allow_3d:
             self.set_view_mode(ViewMode.FRONT)
-        elif event.key() == Qt.Key.Key_P:
+        elif event.key() == Qt.Key.Key_P and self.allow_3d:
             self.set_view_mode(ViewMode.PERSPECTIVE)
-        elif event.key() == Qt.Key.Key_H:
-            self.center_view()
         else:
             super().keyPressEvent(event)
 
@@ -752,7 +792,9 @@ class EditorViewport(QOpenGLWidget):
             self.last_paint_cell = target
             if self.paint_button == Qt.MouseButton.LeftButton and self.tool == EditorTool.PLACE:
                 self._place(target)
-            elif self.paint_button == Qt.MouseButton.RightButton:
+            elif self.paint_button == Qt.MouseButton.RightButton or (
+                self.paint_button == Qt.MouseButton.LeftButton and self.tool == EditorTool.ERASE
+            ):
                 self._erase_at(target)
 
     def _end_paint_stroke(self) -> None:

@@ -7,7 +7,12 @@ import numpy as np
 from piece_editor.domain import PieceDef, PieceInstance
 from piece_editor.library import PieceLibrary
 from piece_editor.mesh import load_piece_mesh
-from piece_editor.renderer3d import build_grid_lines, light_view_projection_matrix, model_matrix
+from piece_editor.renderer3d import (
+    ModernGLSceneRenderer,
+    build_grid_lines,
+    light_view_projection_matrix,
+    model_matrix,
+)
 from piece_editor.scene import Scene
 
 
@@ -67,3 +72,39 @@ def test_directional_shadow_matrix_is_finite_and_invertible() -> None:
     assert matrix.shape == (4, 4)
     assert np.all(np.isfinite(matrix))
     assert not np.isclose(np.linalg.det(matrix), 0.0)
+
+
+def test_renderer_redetects_qt_framebuffer_after_physical_resize() -> None:
+    class FakeFramebuffer:
+        def __init__(self, size: tuple[int, int]) -> None:
+            self.size = size
+            self.used = False
+
+        def use(self) -> None:
+            self.used = True
+
+    class FakeContext:
+        def __init__(self) -> None:
+            self.viewport = (0, 0, 1, 1)
+            self.detected: list[int] = []
+            self.framebuffer = FakeFramebuffer((600, 400))
+
+        def detect_framebuffer(self, framebuffer_id: int) -> FakeFramebuffer:
+            self.detected.append(framebuffer_id)
+            return self.framebuffer
+
+    renderer = object.__new__(ModernGLSceneRenderer)
+    renderer.context = FakeContext()
+    renderer.viewport_size = (300, 200)
+    renderer.qt_framebuffer = FakeFramebuffer((300, 200))
+    renderer.qt_framebuffer_id = 7
+
+    renderer.resize(300, 200, 2.0)
+
+    assert renderer.viewport_size == (600, 400)
+    assert renderer.context.viewport == (0, 0, 600, 400)
+    assert renderer.qt_framebuffer is None
+    renderer._bind_qt_framebuffer(7)
+    assert renderer.context.detected == [7]
+    assert renderer.qt_framebuffer is renderer.context.framebuffer
+    assert renderer.qt_framebuffer.used
