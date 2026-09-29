@@ -11,6 +11,9 @@ from .mesh import load_piece_mesh
 from .scene import Scene
 
 
+GRID_VIEW_RADIUS = 45
+
+
 VERTEX_SHADER = """
 #version 330
 uniform mat4 u_view_projection;
@@ -351,7 +354,7 @@ class ModernGLSceneRenderer:
         self.mesh_signatures: dict[str, tuple[object, ...]] = {}
         self.line_buffer: moderngl.Buffer | None = None
         self.line_vao: moderngl.VertexArray | None = None
-        self.line_bounds: tuple[int, int, int] | None = None
+        self.line_bounds: tuple[object, ...] | None = None
         self.viewport_size = (1, 1)
         self.qt_framebuffer: moderngl.Framebuffer | None = None
         self.qt_framebuffer_id: int | None = None
@@ -582,6 +585,19 @@ class ModernGLSceneRenderer:
         far = far[:3] / far[3]
         return near, _normalize(far - near)
 
+    def project_world(self, point: tuple[float, float, float]) -> tuple[float, float] | None:
+        clip = self.view_projection() @ np.asarray((*point, 1.0), dtype=np.float32)
+        if float(clip[3]) <= 1e-8:
+            return None
+        ndc = clip[:3] / clip[3]
+        if not np.all(np.isfinite(ndc)):
+            return None
+        width, height = self.viewport_size
+        return (
+            (float(ndc[0]) + 1.0) * 0.5 * width,
+            (1.0 - float(ndc[1])) * 0.5 * height,
+        )
+
     def raycast_grid(self, x: float, y: float, scene: Scene, include_ground: bool = True) -> RayHit | None:
         origin, direction = self.screen_ray(x, y)
         hit = _grid_raycast(origin, direction, scene)
@@ -594,8 +610,6 @@ class ModernGLSceneRenderer:
             return None
         point = origin + direction * distance
         x_cell, z_cell = math.floor(float(point[0])), math.floor(float(point[2]))
-        if not (scene.min_x <= x_cell < scene.max_x and scene.min_z <= z_cell < scene.max_z):
-            return None
         return RayHit(
             None,
             (x_cell, 0, z_cell),
@@ -669,19 +683,24 @@ class ModernGLSceneRenderer:
         )
 
     def _ensure_grid(self, scene: Scene) -> None:
-        if self.line_bounds == scene.bounds and self.line_vao is not None:
+        center = (
+            math.floor(float(self.camera.target[0]) / 10.0) * 10,
+            math.floor(float(self.camera.target[2]) / 10.0) * 10,
+        )
+        signature = (*scene.bounds, *center)
+        if self.line_bounds == signature and self.line_vao is not None:
             return
         if self.line_vao:
             self.line_vao.release()
         if self.line_buffer:
             self.line_buffer.release()
-        vertices = build_grid_lines(scene)
+        vertices = build_grid_lines(scene, center)
         self.line_buffer = self.context.buffer(vertices.tobytes())
         self.line_vao = self.context.vertex_array(
             self.line_program,
             [(self.line_buffer, "3f 3f", "in_position", "in_color")],
         )
-        self.line_bounds = scene.bounds
+        self.line_bounds = signature
 
 
 def model_matrix(piece: PieceInstance, definition: PieceDef) -> np.ndarray:
@@ -700,26 +719,37 @@ def model_matrix(piece: PieceInstance, definition: PieceDef) -> np.ndarray:
     return matrix
 
 
-def build_grid_lines(scene: Scene) -> np.ndarray:
+def build_grid_lines(
+    scene: Scene,
+    center: tuple[int, int] = (0, 0),
+    radius: int = GRID_VIEW_RADIUS,
+) -> np.ndarray:
     lines: list[tuple[float, float, float, float, float, float]] = []
 
     def add(a, b, color) -> None:
         lines.append((*a, *color))
         lines.append((*b, *color))
 
-    # Keep only the horizontal construction floor; the old upright X/Y grid
-    # obscured pieces while editing from oblique camera angles.
-    add((scene.min_x, 0, 0), (scene.max_x, 0, 0), (0.78, 0.26, 0.28))
+    grid_min_x, grid_max_x = center[0] - radius, center[0] + radius
+    grid_min_z, grid_max_z = center[1] - radius, center[1] + radius
     add((0, 0, 0), (0, scene.bounds[1], 0), (0.28, 0.78, 0.4))
-    add((0, 0, scene.min_z), (0, 0, scene.max_z), (0.28, 0.48, 0.92))
     floor_minor = (0.105, 0.12, 0.145)
     floor_major = (0.19, 0.22, 0.27)
-    for depth in range(scene.min_z, scene.max_z + 1):
-        color = floor_major if depth % 5 == 0 or depth in {scene.min_z, scene.max_z} else floor_minor
-        add((scene.min_x, 0, depth), (scene.max_x, 0, depth), color)
-    for x in range(scene.min_x, scene.max_x + 1):
-        color = floor_major if x % 5 == 0 or x in {scene.min_x, scene.max_x} else floor_minor
-        add((x, 0, scene.min_z), (x, 0, scene.max_z), color)
+    for depth in range(grid_min_z, grid_max_z + 1):
+        color = floor_major if depth % 5 == 0 else floor_minor
+        add((grid_min_x, 0, depth), (grid_max_x, 0, depth), color)
+    for x in range(grid_min_x, grid_max_x + 1):
+        color = floor_major if x % 5 == 0 else floor_minor
+        add((x, 0, grid_min_z), (x, 0, grid_max_z), color)
+
+    # Colored world axes and a subtle 30x30 Front-canvas reference border.
+    add((grid_min_x, 0, 0), (grid_max_x, 0, 0), (0.78, 0.26, 0.28))
+    add((0, 0, grid_min_z), (0, 0, grid_max_z), (0.28, 0.48, 0.92))
+    border = (0.30, 0.34, 0.40)
+    add((scene.min_x, 0.002, scene.min_z), (scene.max_x, 0.002, scene.min_z), border)
+    add((scene.max_x, 0.002, scene.min_z), (scene.max_x, 0.002, scene.max_z), border)
+    add((scene.max_x, 0.002, scene.max_z), (scene.min_x, 0.002, scene.max_z), border)
+    add((scene.min_x, 0.002, scene.max_z), (scene.min_x, 0.002, scene.min_z), border)
     return np.asarray(lines, dtype=np.float32)
 
 
@@ -753,9 +783,15 @@ def orthographic_matrix(
 
 
 def light_view_projection_matrix(scene: Scene) -> np.ndarray:
-    center = np.array((0.0, scene.bounds[1] * 0.5, 0.0), dtype=np.float32)
+    minimum = (scene.min_x, 0, scene.min_z)
+    maximum = (scene.max_x, scene.bounds[1], scene.max_z)
+    if scene.occupied_bounds is not None:
+        occupied_minimum, occupied_maximum = scene.occupied_bounds
+        minimum = tuple(min(minimum[index], occupied_minimum[index]) for index in range(3))
+        maximum = tuple(max(maximum[index], occupied_maximum[index]) for index in range(3))
+    center = (np.asarray(minimum, dtype=np.float32) + np.asarray(maximum, dtype=np.float32)) * 0.5
     direction = _normalize(np.array((-0.45, 0.8, 0.65), dtype=np.float32))
-    extents = (scene.bounds[0], scene.bounds[1], scene.max_z - scene.min_z)
+    extents = tuple(maximum[index] - minimum[index] for index in range(3))
     radius = math.sqrt(sum(float(value * value) for value in extents)) * 0.58 + 3.0
     eye = center + direction * radius * 2.0
     view = look_at_matrix(eye, center, np.array((0.0, 1.0, 0.0), dtype=np.float32))
@@ -821,8 +857,10 @@ def _ray_box_interval(
 
 
 def _grid_raycast(origin: np.ndarray, direction: np.ndarray, scene: Scene) -> RayHit | None:
-    minimum = np.asarray((scene.min_x, 0, scene.min_z), dtype=np.float32)
-    maximum = np.asarray((scene.max_x, scene.bounds[1], scene.max_z), dtype=np.float32)
+    if scene.occupied_bounds is None:
+        return None
+    minimum = np.asarray(scene.occupied_bounds[0], dtype=np.float32)
+    maximum = np.asarray(scene.occupied_bounds[1], dtype=np.float32)
     interval = _ray_box_interval(origin, direction, minimum, maximum)
     if interval is None:
         return None
@@ -878,11 +916,7 @@ def _grid_raycast(origin: np.ndarray, direction: np.ndarray, scene: Scene) -> Ra
         normal_values[axis] = -step[axis]
         normal = tuple(normal_values)  # type: ignore[assignment]
         next_crossing[axis] += crossing_delta[axis]
-        if not (
-            scene.min_x <= cell[0] < scene.max_x
-            and 0 <= cell[1] < scene.bounds[1]
-            and scene.min_z <= cell[2] < scene.max_z
-        ):
+        if not all(minimum[index] <= cell[index] < maximum[index] for index in range(3)):
             break
     return None
 

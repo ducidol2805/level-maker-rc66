@@ -33,8 +33,8 @@ cuboid generated from the piece's declared grid size.
 
 Editing commands now live in a responsive Toolbox above the Palette. Buttons
 fit the available panel width and height, with a centered icon and label below.
-The first row is Brush, Eraser, Move, and Duplicate; the second row is Select
-and Paint. Box Select and Mirror are temporarily hidden. Toolbox artwork is
+The first row is Brush, Eraser, and Duplicate; the second row is Select, Box
+Select, and Paint. Move and Mirror are hidden from the Toolbox. Toolbox artwork is
 loaded from `tool_icon/`.
 
 The Front Editor and 3D Brush are independent, resizable center panels backed
@@ -57,6 +57,9 @@ manually adjustable, and the new pixel sizes are saved on exit.
 - Right-click or drag: erase the piece under each grid cell
 - Shift + click: add/remove a piece from selection
 - B / E / M / P / G: Brush, Eraser, Move, Select, and Paint
+- Arrow Up / Down: move the selection by one cell on Z (`-1` / `+1`)
+- Arrow Left / Right: move the selection by one cell on X
+- Page Up / Page Down: move the selection by one cell on Y
 - R / Shift+R: rotate selection +45° / -45° around the Y axis
 - In Brush mode, R / Shift+R rotates the placement ghost and the placed piece uses that rotation
 - Rotation uses each piece's grid pivot: even axes use the outer corner box center (`0.5`), while odd axes use the center box
@@ -67,6 +70,8 @@ manually adjustable, and the new pixel sizes are saved on exit.
 - H: center the Front origin near the bottom and reset the 3D camera
 - Mouse wheel: zoom
 - Front layer buttons: click one of 30 stacked buttons from -15 (top) to 14 (bottom); new scenes start on layer 0
+- Box Select drag: select every object intersecting the rectangle across all Z layers
+- Shift + Box Select drag: select only objects visible on the current Z layer
 
 ## 3D Brush controls
 
@@ -78,13 +83,16 @@ manually adjustable, and the new pixel sizes are saved on exit.
 - R / Shift+R: rotate selection +45° / -45° around the Y axis
 - Hold Shift with Attach or Erase: temporarily use the opposite operation
 - Select: click to replace selection; Shift-click to toggle a piece
+- Box Select drag: select every projected object in the rectangle, including occluded pieces
+- Shift + Box Select drag: select only pieces with a visible surface in the rectangle
 - H: reset the 3D camera
 
 Orbit sensitivity is intentionally reduced for more precise camera control.
-The 3D guide now uses a 1×1 horizontal floor grid, stronger 5-cell guide lines,
-and world axes; the old upright grid and the Toolbox `Layer Z` control have been removed. Depth is editable on
-both sides of the origin (`Z = -15` through `14`), matching the fixed 30-cell
-depth of the construction canvas.
+The 3D guide uses a dynamic 1×1 horizontal floor grid, stronger 5-cell guide
+lines, and world axes. X/Z placement is unbounded in 3D, while a subtle 30×30
+border marks the Front canvas reference area. The old upright grid and the
+Toolbox `Layer Z` control have been removed. Front layer controls remain capped
+at `Z = -15` through `14`.
 
 Attach places the selected Piece Library item against the pointed face. On an
 empty scene or a missed object it uses the Y=0 construction floor. A drag locks
@@ -96,7 +104,8 @@ Erase/Paint targets without modifying scene or instance-cache data. Ghost
 geometry remains translucent but renders front faces only, preventing rear or
 interior polygons from bleeding through the visible shell.
 
-Move remains Front-only in this milestone; Box Select is temporarily hidden. If ModernGL cannot
+Move remains Front-only in this milestone. Box Select works in both Front and
+3D views. If ModernGL cannot
 initialize, 3D editing is disabled and the viewport reports the renderer error;
 it never applies an edit through the fallback painter.
 
@@ -131,10 +140,11 @@ New scenes extract their default color IDs from `Palette.png` in pixel order
 (left-to-right, then top-to-bottom), then apply the preferred `color_id` order
 from `Endesga 32 Palette color palette.txt`. Editing that TXT order takes
 effect on the next app launch or New Project. Transparent and duplicate pixels
-are ignored. The fixed construction canvas is 30×30 cells: X spans -15 through
-14 and Y spans 0 through 29. Centered, bottom-aligned 10×10 and 20×20 guide
-boxes are drawn more strongly than the normal grid; the 30×30 outer border is
-strongest.
+are ignored. The Front construction canvas and ruler remain 30×30 cells: X
+spans -15 through 14 and Y spans 0 through 29. Centered, bottom-aligned 10×10
+and 20×20 guide boxes are drawn more strongly than the normal grid; the 30×30
+outer border is strongest. The shared scene may contain 3D-authored objects at
+any X/Z coordinate, even when they sit outside the Front canvas.
 
 The 32-color palette is displayed as an 8×4 swatch grid at the top-left,
 between the Toolbox and piece library. Swatches divide the available palette

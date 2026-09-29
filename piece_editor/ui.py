@@ -755,7 +755,6 @@ class MainWindow(QMainWindow):
             "place": icon_dir / "tool_brush.png",
             "erase": icon_dir / "tool_eraser.png",
             "paint": icon_dir / "tool_paint.png",
-            "move": icon_dir / "tool_move.png",
             "duplicate": icon_dir / "tool_dup.png",
             "select": icon_dir / "tool_select.png",
             "box": icon_dir / "tool_box.png",
@@ -778,20 +777,23 @@ class MainWindow(QMainWindow):
                 checkable=True,
                 checked=tool == EditorTool.PLACE,
             )
-            button.setShortcut(QKeySequence(shortcut))
-            button.setToolTip(f"{title} ({shortcut})")
+            if shortcut:
+                button.setShortcut(QKeySequence(shortcut))
+                button.setToolTip(f"{title} ({shortcut})")
+            else:
+                button.setToolTip(title)
             self.tool_group.addButton(button)
             self.tool_actions[tool] = button
 
         add_tool(EditorTool.PLACE, "place", "Brush", "B", 0, 0)
         add_tool(EditorTool.ERASE, "erase", "Eraser", "E", 0, 1)
-        add_tool(EditorTool.MOVE, "move", "Move", "M", 0, 2)
         self.toolbox_panel.add_button(
-            "duplicate", "Duplicate", icons["duplicate"], self.viewport.duplicate_selection, 0, 3
+            "duplicate", "Duplicate", icons["duplicate"], self.viewport.duplicate_selection, 0, 2
         )
         self.toolbox_panel.buttons["duplicate"].setToolTip("Duplicate (Ctrl+D)")
         add_tool(EditorTool.SELECT, "select", "Select", "P", 1, 0)
-        add_tool(EditorTool.PAINT, "paint", "Paint", "G", 1, 1)
+        add_tool(EditorTool.BOX_SELECT, "box", "Box Select", "", 1, 1)
+        add_tool(EditorTool.PAINT, "paint", "Paint", "G", 1, 2)
         self.tool_actions[EditorTool.PLACE].setChecked(True)
 
     def _build_menu(self) -> None:

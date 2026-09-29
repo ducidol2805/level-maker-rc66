@@ -190,16 +190,16 @@ def test_toolbox_buttons_fit_panel_in_requested_rows() -> None:
         "erase",
         "paint",
         "select",
-        "move",
+        "box",
         "duplicate",
     }
     expected_positions = {
         "place": (0, 0),
         "erase": (0, 1),
-        "move": (0, 2),
-        "duplicate": (0, 3),
+        "duplicate": (0, 2),
         "select": (1, 0),
-        "paint": (1, 1),
+        "box": (1, 1),
+        "paint": (1, 2),
     }
     for key, position in expected_positions.items():
         index = window.toolbox_panel.grid.indexOf(window.toolbox_panel.buttons[key])
@@ -208,10 +208,10 @@ def test_toolbox_buttons_fit_panel_in_requested_rows() -> None:
     assert {key: button.shortcut().toString() for key, button in window.toolbox_panel.buttons.items()} == {
         "place": "B",
         "erase": "E",
-        "move": "M",
         "duplicate": "",
         "select": "P",
         "paint": "G",
+        "box": "",
     }
     for button in window.toolbox_panel.buttons.values():
         assert button.sizePolicy().horizontalPolicy() == QSizePolicy.Policy.Expanding
@@ -222,9 +222,9 @@ def test_toolbox_buttons_fit_panel_in_requested_rows() -> None:
         "place": "tool_brush.png",
         "erase": "tool_eraser.png",
         "paint": "tool_paint.png",
-        "move": "tool_move.png",
         "duplicate": "tool_dup.png",
         "select": "tool_select.png",
+        "box": "tool_box.png",
     }
     for key, filename in expected_icons.items():
         assert window.toolbox_icon_paths[key].name == filename

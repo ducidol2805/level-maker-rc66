@@ -5,7 +5,7 @@ from dataclasses import replace
 from enum import Enum
 
 from PySide6.QtCore import QPoint, QPointF, QRectF, Qt, Signal
-from PySide6.QtGui import QColor, QKeyEvent, QMouseEvent, QPainter, QPen, QPolygonF, QWheelEvent
+from PySide6.QtGui import QColor, QKeyEvent, QMouseEvent, QPainter, QPainterPath, QPen, QPolygonF, QWheelEvent
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
 from PySide6.QtWidgets import (
     QButtonGroup,
@@ -168,6 +168,7 @@ class EditorViewport(QOpenGLWidget):
         self._stroke_checkpointed = False
         self.box_start: QPoint | None = None
         self.box_end: QPoint | None = None
+        self.box_select_visible_only = False
         self.pan_start: QPoint | None = None
         self.camera_drag_start: QPoint | None = None
         self.camera_drag_last: QPoint | None = None
@@ -390,6 +391,24 @@ class EditorViewport(QOpenGLWidget):
             replacements[piece.instance_id] = replace(piece, rotation=desired)
         self._apply_replacements(replacements)
 
+    def move_selection(self, offset: tuple[int, int, int]) -> None:
+        pieces = self.selected_pieces()
+        if not pieces:
+            return
+        dx, dy, dz = offset
+        replacements = {
+            piece.instance_id: replace(
+                piece,
+                position=(
+                    piece.position[0] + dx,
+                    piece.position[1] + dy,
+                    piece.position[2] + dz,
+                ),
+            )
+            for piece in pieces
+        }
+        self._apply_replacements(replacements)
+
     def rotate_current(self, delta: int) -> None:
         if self.tool == EditorTool.PLACE and self.active_piece_id in self.scene.piece_defs:
             self.document.rotate_active_piece(delta)
@@ -530,6 +549,7 @@ class EditorViewport(QOpenGLWidget):
                 self.renderer3d.context.finish()
                 painter.endNativePainting()
                 native_painting = False
+                self._paint_box_overlay(painter)
                 painter.end()
                 self.renderer_panel.update_stats(self.renderer3d.stats)
                 self.renderer_panel.raise_()
@@ -587,10 +607,16 @@ class EditorViewport(QOpenGLWidget):
                 ghost.setAlpha(110)
                 painter.fillRect(rect, ghost)
         if self.box_start and self.box_end:
-            rect = QRectF(self.box_start, self.box_end).normalized()
-            painter.fillRect(rect, QColor(80, 150, 255, 45))
-            painter.setPen(QPen(QColor("#6ea8ff"), 1, Qt.PenStyle.DashLine))
-            painter.drawRect(rect)
+            self._paint_box_overlay(painter)
+
+    def _paint_box_overlay(self, painter: QPainter) -> None:
+        if not self.box_start or not self.box_end:
+            return
+        rect = QRectF(self.box_start, self.box_end).normalized()
+        painter.fillRect(rect, QColor(80, 150, 255, 45))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.setPen(QPen(QColor("#6ea8ff"), 1, Qt.PenStyle.DashLine))
+        painter.drawRect(rect)
 
     def _paint_grid(self, painter: QPainter) -> None:
         cell = self.cell_size
@@ -660,6 +686,7 @@ class EditorViewport(QOpenGLWidget):
             self._perspective_hits.append((front.united(side).united(top), piece.instance_id))
         painter.setPen(QColor("#aab2bf"))
         painter.drawText(16, 26, "3D Brush requires an active OpenGL 3.3 renderer")
+        self._paint_box_overlay(painter)
 
     @staticmethod
     def _iso_point(x: int, y: int, z: int, origin: QPointF, scale: float) -> QPointF:
@@ -692,7 +719,11 @@ class EditorViewport(QOpenGLWidget):
                 self.camera_drag_button = event.button()
                 self.camera_drag_moved = False
             elif event.button() == Qt.MouseButton.LeftButton:
-                if self.tool in (EditorTool.PLACE, EditorTool.ERASE, EditorTool.PAINT):
+                if self.tool == EditorTool.BOX_SELECT:
+                    self.box_start = point
+                    self.box_end = point
+                    self.box_select_visible_only = bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier)
+                elif self.tool in (EditorTool.PLACE, EditorTool.ERASE, EditorTool.PAINT):
                     self._begin_3d_stroke(point, event.modifiers())
                 else:
                     self._select_3d(point, event.modifiers())
@@ -712,6 +743,7 @@ class EditorViewport(QOpenGLWidget):
         elif self.tool == EditorTool.BOX_SELECT:
             self.box_start = event.position().toPoint()
             self.box_end = self.box_start
+            self.box_select_visible_only = bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier)
         else:
             piece = self.scene.piece_at((cell[0], cell[1], self.current_layer))
             if event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
@@ -731,7 +763,10 @@ class EditorViewport(QOpenGLWidget):
     def mouseMoveEvent(self, event: QMouseEvent) -> None:  # noqa: N802
         point = event.position().toPoint()
         if self.view_mode == ViewMode.PERSPECTIVE:
-            if self.camera_drag_last and self.renderer3d:
+            if self.box_start:
+                self.box_end = point
+                self.update()
+            elif self.camera_drag_last and self.renderer3d:
                 delta = point - self.camera_drag_last
                 assert self.camera_drag_start is not None
                 if abs(point.x() - self.camera_drag_start.x()) + abs(point.y() - self.camera_drag_start.y()) > 3:
@@ -767,7 +802,12 @@ class EditorViewport(QOpenGLWidget):
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:  # noqa: N802
         if self.view_mode == ViewMode.PERSPECTIVE:
-            if event.button() == self.camera_drag_button:
+            if event.button() == Qt.MouseButton.LeftButton and self.box_start and self.box_end:
+                self._complete_box_select_3d(self.box_select_visible_only)
+                self.box_start = self.box_end = None
+                self.box_select_visible_only = False
+                self.update()
+            elif event.button() == self.camera_drag_button:
                 self.camera_drag_start = None
                 self.camera_drag_last = None
                 self.camera_drag_button = None
@@ -786,8 +826,9 @@ class EditorViewport(QOpenGLWidget):
         if event.button() != Qt.MouseButton.LeftButton:
             return
         if self.box_start and self.box_end:
-            self._complete_box_select()
+            self._complete_box_select(self.box_select_visible_only)
             self.box_start = self.box_end = None
+            self.box_select_visible_only = False
             self.update()
             return
         if self.drag_start_cell:
@@ -1005,6 +1046,18 @@ class EditorViewport(QOpenGLWidget):
             self.set_tool(EditorTool.PAINT)
         elif self.read_only:
             super().keyPressEvent(event)
+        elif event.key() == Qt.Key.Key_Up:
+            self.move_selection((0, 0, -1))
+        elif event.key() == Qt.Key.Key_Down:
+            self.move_selection((0, 0, 1))
+        elif event.key() == Qt.Key.Key_Left:
+            self.move_selection((-1, 0, 0))
+        elif event.key() == Qt.Key.Key_Right:
+            self.move_selection((1, 0, 0))
+        elif event.key() == Qt.Key.Key_PageUp:
+            self.move_selection((0, 1, 0))
+        elif event.key() == Qt.Key.Key_PageDown:
+            self.move_selection((0, -1, 0))
         elif event.key() == Qt.Key.Key_Delete:
             self.delete_selection()
         elif event.key() == Qt.Key.Key_R:
@@ -1081,6 +1134,7 @@ class EditorViewport(QOpenGLWidget):
             self.active_color_id,
         )
         try:
+            self.scene.validate_reference_bounds(instance)
             added, errors = self.document.add_instances((instance,))
         except PlacementError as exc:
             self.status_message.emit(str(exc))
@@ -1094,7 +1148,7 @@ class EditorViewport(QOpenGLWidget):
             return
         self.document.remove_ids((piece.instance_id,))
 
-    def _complete_box_select(self) -> None:
+    def _complete_box_select(self, visible_only: bool = False) -> None:
         assert self.box_start and self.box_end
         screen_rect = QRectF(self.box_start, self.box_end).normalized()
         selected: set[str] = set()
@@ -1104,15 +1158,113 @@ class EditorViewport(QOpenGLWidget):
             x = piece.position[0] + offset[0]
             y = piece.position[1] + offset[1]
             z = piece.position[2] + offset[2]
-            if z <= self.current_layer < z + sz:
-                if screen_rect.intersects(self._grid_rect(x, y, sx, sy)):
-                    selected.add(piece.instance_id)
+            if visible_only and not (z <= self.current_layer < z + sz):
+                continue
+            if screen_rect.intersects(self._grid_rect(x, y, sx, sy)):
+                selected.add(piece.instance_id)
         self.document.set_selection(selected)
+
+    def _complete_box_select_3d(self, visible_only: bool = False) -> None:
+        assert self.box_start and self.box_end
+        if self.renderer3d is None:
+            return
+        screen_rect = QRectF(self.box_start, self.box_end).normalized()
+        selected: set[str] = set()
+        for piece in self.scene.pieces:
+            polygon = self._project_piece_3d(piece)
+            if polygon is None:
+                continue
+            path = QPainterPath()
+            path.addPolygon(polygon)
+            path.closeSubpath()
+            if (
+                not path.intersects(screen_rect)
+                and not path.contains(screen_rect.center())
+                and not screen_rect.contains(polygon.boundingRect().center())
+            ):
+                continue
+            if not visible_only or self._piece_visible_in_3d_box(piece.instance_id, path, screen_rect):
+                selected.add(piece.instance_id)
+        self.document.set_selection(selected)
+
+    def _project_piece_3d(self, piece: PieceInstance) -> QPolygonF | None:
+        if self.renderer3d is None:
+            return None
+        offset, size = self.scene.require_definition(piece.piece_id).rotated_bounds(piece.rotation)
+        minimum = tuple(piece.position[index] + offset[index] for index in range(3))
+        maximum = tuple(minimum[index] + size[index] for index in range(3))
+        ratio = self.devicePixelRatioF()
+        points: list[tuple[float, float]] = []
+        for x in (minimum[0], maximum[0]):
+            for y in (minimum[1], maximum[1]):
+                for z in (minimum[2], maximum[2]):
+                    projected = self.renderer3d.project_world((x, y, z))
+                    if projected is not None:
+                        points.append((projected[0] / ratio, projected[1] / ratio))
+        hull = self._convex_hull(points)
+        return QPolygonF([QPointF(x, y) for x, y in hull]) if len(hull) >= 3 else None
+
+    def _piece_visible_in_3d_box(self, instance_id: str, path: QPainterPath, box: QRectF) -> bool:
+        sample_rect = path.boundingRect().intersected(box)
+        if sample_rect.isEmpty():
+            return False
+        samples = [sample_rect.center()]
+        center = path.boundingRect().center()
+        for vertex in path.toFillPolygon():
+            samples.append(
+                QPointF(
+                    vertex.x() * 0.9 + center.x() * 0.1,
+                    vertex.y() * 0.9 + center.y() * 0.1,
+                )
+            )
+        for x_step in range(5):
+            for y_step in range(5):
+                samples.append(
+                    QPointF(
+                        sample_rect.left() + sample_rect.width() * (x_step + 0.5) / 5.0,
+                        sample_rect.top() + sample_rect.height() * (y_step + 0.5) / 5.0,
+                    )
+                )
+        for sample in samples:
+            if not path.contains(sample):
+                continue
+            hit = self._raycast_3d(QPoint(round(sample.x()), round(sample.y())), include_ground=False)
+            if hit is not None and hit.instance_id == instance_id:
+                return True
+        return False
+
+    @staticmethod
+    def _convex_hull(points: list[tuple[float, float]]) -> list[tuple[float, float]]:
+        ordered = sorted(set(points))
+        if len(ordered) <= 1:
+            return ordered
+
+        def cross(origin, first, second) -> float:
+            return (first[0] - origin[0]) * (second[1] - origin[1]) - (first[1] - origin[1]) * (
+                second[0] - origin[0]
+            )
+
+        lower: list[tuple[float, float]] = []
+        for point in ordered:
+            while len(lower) >= 2 and cross(lower[-2], lower[-1], point) <= 0:
+                lower.pop()
+            lower.append(point)
+        upper: list[tuple[float, float]] = []
+        for point in reversed(ordered):
+            while len(upper) >= 2 and cross(upper[-2], upper[-1], point) <= 0:
+                upper.pop()
+            upper.append(point)
+        return lower[:-1] + upper[:-1]
 
     def _apply_replacements(self, replacements: dict[str, PieceInstance]) -> None:
         if not replacements:
             return
         try:
+            if self.view_mode == ViewMode.FRONT:
+                for instance_id, replacement in replacements.items():
+                    current = self.scene.piece_by_id(instance_id)
+                    if current is not None and self.scene.cells_for(current) != self.scene.cells_for(replacement):
+                        self.scene.validate_reference_bounds(replacement)
             self.document.replace_many(replacements)
         except PlacementError as exc:
             self.status_message.emit(str(exc))
