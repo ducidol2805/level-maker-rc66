@@ -20,6 +20,9 @@ python -m PyInstaller --noconfirm --clean Racblox.spec
 The standalone app is written to `dist/Racblox.exe` with `app_icon.png` as its
 executable and window icon.
 
+See [`UNITY_IMPORT_GUIDE.md`](UNITY_IMPORT_GUIDE.md) for importing exported
+levels, FBX pieces, pivots, and palette colors into Unity.
+
 The default library is `library/`; additional piece folders can be opened from
 **File > Open Piece Library**. Each piece folder contains a `piece.json` and an
 optional mesh. Perspective mode renders actual binary FBX, GLB, GLTF, OBJ, PLY,
