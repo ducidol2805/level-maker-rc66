@@ -686,19 +686,17 @@ class ModernGLSceneRenderer:
 
 def model_matrix(piece: PieceInstance, definition: PieceDef) -> np.ndarray:
     rotation = piece.rotation % 360
-    sx, sy, _ = definition.size
-    offsets = {0: (0.0, 0.0), 90: (float(sy), 0.0), 180: (float(sx), float(sy)), 270: (0.0, float(sx))}
-    offset_x, offset_y = offsets.get(rotation, (0.0, 0.0))
     angle = math.radians(rotation)
     cosine, sine = math.cos(angle), math.sin(angle)
+    pivot_x, _, pivot_z = definition.pivot  # type: ignore[misc]
     matrix = np.eye(4, dtype=np.float32)
     matrix[0, 0] = cosine
-    matrix[0, 1] = -sine
-    matrix[1, 0] = sine
-    matrix[1, 1] = cosine
-    matrix[0, 3] = piece.position[0] + offset_x
-    matrix[1, 3] = piece.position[1] + offset_y
-    matrix[2, 3] = piece.position[2]
+    matrix[0, 2] = sine
+    matrix[2, 0] = -sine
+    matrix[2, 2] = cosine
+    matrix[0, 3] = piece.position[0] + pivot_x - (cosine * pivot_x + sine * pivot_z)
+    matrix[1, 3] = piece.position[1]
+    matrix[2, 3] = piece.position[2] + pivot_z - (-sine * pivot_x + cosine * pivot_z)
     return matrix
 
 

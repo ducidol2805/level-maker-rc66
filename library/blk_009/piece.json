@@ -1,0 +1,9 @@
+{
+  "id": "blk_009",
+  "size": [2, 1, 4],
+  "pivot": [0.5, 0.5, 0.5],
+  "mesh": "../../models/BLK/BLK_009.fbx",
+  "allowed_rotations": [0, 45, 90, 135, 180, 225, 270, 315],
+  "category": "Blocks",
+  "tags": ["block", "2x1x4"]
+}

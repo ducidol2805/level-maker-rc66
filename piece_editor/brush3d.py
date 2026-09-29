@@ -26,13 +26,17 @@ def piece_position_for_target(
     target_cell: Vec3i,
     normal: Vec3i,
 ) -> Vec3i:
-    size = definition.rotated_size(rotation)
+    offset, size = definition.rotated_bounds(rotation)
     axis = normal_axis(normal)
-    result = [target_cell[index] - size[index] // 2 for index in range(3)]
+    result = [
+        target_cell[index] - int(round(definition.pivot[index] - 0.5))  # type: ignore[index]
+        for index in range(3)
+    ]
     if normal[axis] > 0:
-        result[axis] = target_cell[axis]
+        bounds_origin = target_cell[axis]
     else:
-        result[axis] = target_cell[axis] - size[axis] + 1
+        bounds_origin = target_cell[axis] - size[axis] + 1
+    result[axis] = bounds_origin - offset[axis]
     return result[0], result[1], result[2]
 
 

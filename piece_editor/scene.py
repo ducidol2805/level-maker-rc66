@@ -10,7 +10,7 @@ class PlacementError(ValueError):
     pass
 
 
-EDITOR_BOUNDS: Vec3i = (30, 30, 16)
+EDITOR_BOUNDS: Vec3i = (30, 30, 30)
 
 
 @dataclass(slots=True)
@@ -32,10 +32,10 @@ class Scene:
 
     def cells_for(self, instance: PieceInstance) -> tuple[Vec3i, ...]:
         definition = self.require_definition(instance.piece_id)
-        sx, sy, sz = definition.rotated_size(instance.rotation)
+        offset, (sx, sy, sz) = definition.rotated_bounds(instance.rotation)
         px, py, pz = instance.position
         return tuple(
-            (px + dx, py + dy, pz + dz)
+            (px + offset[0] + dx, py + offset[1] + dy, pz + offset[2] + dz)
             for dz in range(sz)
             for dy in range(sy)
             for dx in range(sx)
@@ -58,13 +58,13 @@ class Scene:
 
     @property
     def min_z(self) -> int:
-        """Inclusive negative depth bound; positive project depths stay compatible."""
-        return -self.bounds[2]
+        """Inclusive centered depth bound."""
+        return -(self.bounds[2] // 2)
 
     @property
     def max_z(self) -> int:
-        """Exclusive positive depth bound."""
-        return self.bounds[2]
+        """Exclusive centered depth bound."""
+        return self.min_z + self.bounds[2]
 
     def validate(self, instance: PieceInstance, ignore_ids: Iterable[str] = ()) -> None:
         definition = self.require_definition(instance.piece_id)

@@ -19,11 +19,11 @@ from piece_editor.scene import Scene
 
 def test_existing_binary_fbx_loads_as_real_triangle_mesh() -> None:
     library = PieceLibrary.load(Path(__file__).resolve().parents[1] / "library")
-    definition = library.pieces["box_1x1x1"]
+    definition = library.pieces["blk_001"]
 
     mesh = load_piece_mesh(definition)
 
-    assert mesh.source.endswith("Box_1x1x1.fbx")
+    assert mesh.source.endswith("BLK_001.fbx")
     assert mesh.positions.shape[0] > 36
     assert mesh.positions.shape == mesh.normals.shape
     assert np.all(np.isfinite(mesh.positions))
@@ -51,8 +51,29 @@ def test_rotated_model_matrix_stays_inside_scene_footprint() -> None:
 
     world = (model_matrix(piece, definition) @ local_corners.T).T[:, :3]
 
-    assert np.allclose(world.min(axis=0), (-3, 4, 2))
-    assert np.allclose(world.max(axis=0), (-2, 6, 3))
+    assert np.allclose(world.min(axis=0), (-3, 4, 1))
+    assert np.allclose(world.max(axis=0), (-2, 5, 3))
+    local_pivot = np.asarray((*definition.pivot, 1), dtype=np.float32)
+    assert np.allclose((model_matrix(piece, definition) @ local_pivot)[:3], (-2.5, 4.5, 2.5))
+
+
+def test_diagonal_model_matrix_is_shifted_into_positive_local_footprint() -> None:
+    definition = PieceDef("bar", (2, 1, 1))
+    local_corners = np.array(
+        ((0, 0, 0, 1), (2, 0, 0, 1), (0, 1, 0, 1), (2, 1, 1, 1)),
+        dtype=np.float32,
+    )
+    piece = PieceInstance("bar", (-3, 4, 2), 45, 0)
+
+    world = (model_matrix(piece, definition) @ local_corners.T).T[:, :3]
+
+    offset, size = definition.rotated_bounds(45)
+    bounds_min = np.asarray(piece.position) + np.asarray(offset)
+    bounds_max = bounds_min + np.asarray(size)
+    assert np.all(world.min(axis=0) >= bounds_min - 1e-6)
+    assert np.all(world.max(axis=0) <= bounds_max + 1e-6)
+    local_pivot = np.asarray((*definition.pivot, 1), dtype=np.float32)
+    assert np.allclose((model_matrix(piece, definition) @ local_pivot)[:3], (-2.5, 4.5, 2.5))
 
 
 def test_3d_grid_contains_finite_colored_line_vertices() -> None:

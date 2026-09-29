@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import math
 from pathlib import Path
 import re
 from typing import Any, Iterable
@@ -41,9 +42,9 @@ class PaletteColor:
 class PieceDef:
     id: str
     size: Vec3i
-    pivot: tuple[float, float, float] = (0.0, 0.0, 0.0)
+    pivot: tuple[float, float, float] | None = None
     mesh: str | None = None
-    allowed_rotations: tuple[int, ...] = (0, 90, 180, 270)
+    allowed_rotations: tuple[int, ...] = (0, 45, 90, 135, 180, 225, 270, 315)
     category: str = "General"
     tags: tuple[str, ...] = ()
     source_dir: Path | None = field(default=None, compare=False, repr=False)
@@ -53,15 +54,38 @@ class PieceDef:
             raise ValueError("Piece id cannot be empty")
         if len(self.size) != 3 or any(v <= 0 for v in self.size):
             raise ValueError(f"Invalid size for {self.id}: {self.size}")
+        pivot = self.pivot or tuple(value / 2.0 if value % 2 else 0.5 for value in self.size)
+        if len(pivot) != 3:
+            raise ValueError("pivot must contain exactly three values")
+        object.__setattr__(self, "pivot", tuple(float(value) for value in pivot))
         rotations = tuple(dict.fromkeys(int(r) % 360 for r in self.allowed_rotations))
-        if not rotations or any(r % 90 for r in rotations):
-            raise ValueError("Allowed rotations must be non-empty 90-degree increments")
+        if not rotations or any(r % 45 for r in rotations):
+            raise ValueError("Allowed rotations must be non-empty 45-degree increments")
         object.__setattr__(self, "allowed_rotations", rotations)
 
     def rotated_size(self, rotation: int) -> Vec3i:
-        if rotation % 180 == 0:
-            return self.size
-        return (self.size[1], self.size[0], self.size[2])
+        return self.rotated_bounds(rotation)[1]
+
+    def rotated_bounds(self, rotation: int) -> tuple[Vec3i, Vec3i]:
+        angle = math.radians(rotation % 360)
+        cosine = math.cos(angle)
+        sine = math.sin(angle)
+        pivot_x, _, pivot_z = self.pivot  # type: ignore[misc]
+        corners = ((0.0, 0.0), (float(self.size[0]), 0.0), (0.0, float(self.size[2])), (float(self.size[0]), float(self.size[2])))
+        rotated = tuple(
+            (
+                pivot_x + cosine * (x - pivot_x) + sine * (z - pivot_z),
+                pivot_z - sine * (x - pivot_x) + cosine * (z - pivot_z),
+            )
+            for x, z in corners
+        )
+        minimum_x = math.floor(min(x for x, _ in rotated) + 1e-7)
+        maximum_x = math.ceil(max(x for x, _ in rotated) - 1e-7)
+        minimum_z = math.floor(min(z for _, z in rotated) + 1e-7)
+        maximum_z = math.ceil(max(z for _, z in rotated) - 1e-7)
+        offset = (minimum_x, 0, minimum_z)
+        size = (maximum_x - minimum_x, self.size[1], maximum_z - minimum_z)
+        return offset, size
 
     @property
     def volume(self) -> int:
@@ -80,7 +104,7 @@ class PieceDef:
         data: dict[str, Any] = {
             "id": self.id,
             "size": list(self.size),
-            "pivot": list(self.pivot),
+            "pivot": list(self.pivot or ()),
             "allowed_rotations": list(self.allowed_rotations),
             "category": self.category,
             "tags": list(self.tags),
@@ -91,15 +115,16 @@ class PieceDef:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any], source_dir: Path | None = None) -> "PieceDef":
-        pivot = tuple(float(v) for v in data.get("pivot", (0, 0, 0)))
-        if len(pivot) != 3:
-            raise ValueError("pivot must contain exactly three values")
+        raw_pivot = data.get("pivot")
+        pivot = tuple(float(v) for v in raw_pivot) if raw_pivot is not None else None
         return cls(
             id=str(data["id"]),
             size=_vec3(data["size"], "size"),
             pivot=pivot,  # type: ignore[arg-type]
             mesh=str(data["mesh"]) if data.get("mesh") else None,
-            allowed_rotations=tuple(int(v) for v in data.get("allowed_rotations", (0, 90, 180, 270))),
+            allowed_rotations=tuple(
+                int(v) for v in data.get("allowed_rotations", (0, 45, 90, 135, 180, 225, 270, 315))
+            ),
             category=str(data.get("category", "General")),
             tags=tuple(str(v) for v in data.get("tags", ())),
             source_dir=source_dir,

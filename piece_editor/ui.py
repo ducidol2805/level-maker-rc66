@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QListWidget,
     QListWidgetItem,
+    QListView,
     QMainWindow,
     QMessageBox,
     QPushButton,
@@ -45,6 +46,7 @@ from .library import PieceLibrary
 from .reconstruction import ReconstructionResult, ReconstructionSettings, reconstruct_image
 from .scene import EDITOR_BOUNDS, PlacementError, Scene
 from .solver import GreedySolver, SolverError
+from .thumbnail import piece_thumbnail
 from .viewport import EditorViewport, ViewMode
 
 
@@ -140,6 +142,65 @@ class ReconstructionPreview(QDialog):
         self.accept() if action != "cancel" else self.reject()
 
 
+class ResponsivePieceGrid(QListWidget):
+    CELL_SIZE = QSize(84, 76)
+    MIN_CELL_WIDTH = 78
+    MAX_CELL_WIDTH = 90
+    MIN_SPACING = 4
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.column_count = 1
+        self.computed_spacing = self.MIN_SPACING
+        self.nominal_cell_size = QSize(self.CELL_SIZE)
+        self.min_cell_width = self.MIN_CELL_WIDTH
+        self.max_cell_width = self.MAX_CELL_WIDTH
+        self.cell_size = QSize(self.CELL_SIZE)
+        self._updating_metrics = False
+        self.setGridSize(QSize())
+        self.setSpacing(self.MIN_SPACING)
+        # A stable viewport width prevents column/scrollbar feedback loops.
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
+
+    def addItem(self, item: QListWidgetItem) -> None:  # noqa: N802
+        item.setSizeHint(self.cell_size)
+        super().addItem(item)
+
+    def resizeEvent(self, event) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        self._update_grid_metrics()
+
+    def set_nominal_cell_size(self, size: QSize) -> None:
+        self.nominal_cell_size = QSize(size)
+        self.min_cell_width = max(1, size.width() - 6)
+        self.max_cell_width = size.width() + 6
+        self._update_grid_metrics()
+
+    def _update_grid_metrics(self) -> None:
+        if self._updating_metrics:
+            return
+        available = max(1, self.viewport().width())
+        nominal_width = self.nominal_cell_size.width()
+        columns = max(1, (available + self.MIN_SPACING) // (nominal_width + self.MIN_SPACING))
+        flexible_width = (available - (columns + 1) * self.MIN_SPACING - 1) // columns
+        cell_width = max(self.min_cell_width, min(self.max_cell_width, flexible_width))
+        spacing = max(self.MIN_SPACING, (available - columns * cell_width - 1) // (columns + 1))
+        cell_size = QSize(cell_width, self.nominal_cell_size.height())
+        self.column_count = columns
+        self.computed_spacing = spacing
+        if self.spacing() == spacing and self.cell_size == cell_size:
+            return
+        self._updating_metrics = True
+        try:
+            self.cell_size = cell_size
+            for row in range(self.count()):
+                self.item(row).setSizeHint(cell_size)
+            if self.spacing() != spacing:
+                self.setSpacing(spacing)
+        finally:
+            self._updating_metrics = False
+
+
 class PieceLibraryPanel(QWidget):
     piece_selected = Signal(str)
 
@@ -147,14 +208,35 @@ class PieceLibraryPanel(QWidget):
         super().__init__()
         layout = QVBoxLayout(self)
         layout.setContentsMargins(6, 6, 6, 6)
-        layout.addWidget(QLabel("Piece Library"))
+        thumbnail_controls = QHBoxLayout()
+        thumbnail_controls.addWidget(QLabel("Piece Library"))
+        self.thumbnail_slider = QSlider(Qt.Orientation.Horizontal)
+        self.thumbnail_slider.setRange(40, 96)
+        self.thumbnail_slider.setSingleStep(4)
+        self.thumbnail_slider.setPageStep(8)
+        self.thumbnail_slider.setValue(64)
+        self.thumbnail_slider.setToolTip("Thumbnail size")
+        thumbnail_controls.addWidget(self.thumbnail_slider, 1)
+        self.thumbnail_value = QLabel("64")
+        self.thumbnail_value.setMinimumWidth(24)
+        self.thumbnail_value.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        thumbnail_controls.addWidget(self.thumbnail_value)
+        layout.addLayout(thumbnail_controls)
         self.search = QLineEdit()
         self.search.setPlaceholderText("Search pieces…")
         self.search.textChanged.connect(self._filter)
         layout.addWidget(self.search)
-        self.list = QListWidget()
+        self.list = ResponsivePieceGrid()
+        self.list.setObjectName("pieceLibraryGrid")
         self.list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.list.setViewMode(QListView.ViewMode.IconMode)
+        self.list.setResizeMode(QListView.ResizeMode.Adjust)
+        self.list.setMovement(QListView.Movement.Static)
+        self.list.setWrapping(True)
+        self.list.setWordWrap(True)
+        self.list.setIconSize(QSize(64, 48))
         self.list.currentItemChanged.connect(self._selected)
+        self.thumbnail_slider.valueChanged.connect(self._set_thumbnail_size)
         layout.addWidget(self.list, 1)
         self.library: PieceLibrary | None = None
 
@@ -162,14 +244,12 @@ class PieceLibraryPanel(QWidget):
         self.library = library
         self.list.clear()
         for category, pieces in library.by_category().items():
-            header = QListWidgetItem(category)
-            header.setFlags(Qt.ItemFlag.NoItemFlags)
-            header.setForeground(QColor("#8f9aa9"))
-            self.list.addItem(header)
             for piece in pieces:
-                item = QListWidgetItem(f"  {piece.id}  ({piece.size[0]}×{piece.size[1]}×{piece.size[2]})")
+                dimensions = f"{piece.size[0]}×{piece.size[1]}×{piece.size[2]}"
+                item = QListWidgetItem(piece_thumbnail(piece), dimensions)
                 item.setData(Qt.ItemDataRole.UserRole, piece.id)
-                item.setToolTip("Tags: " + ", ".join(piece.tags))
+                item.setTextAlignment(Qt.AlignmentFlag.AlignHCenter)
+                item.setToolTip(f"{piece.id}\n{category} • {dimensions}\nTags: " + ", ".join(piece.tags))
                 self.list.addItem(item)
         for row in range(self.list.count()):
             item = self.list.item(row)
@@ -186,6 +266,20 @@ class PieceLibraryPanel(QWidget):
                 definition = self.library.pieces[piece_id] if self.library else None
                 haystack = " ".join((piece_id, definition.category, *definition.tags)).lower() if definition else piece_id
                 item.setHidden(query not in haystack)
+
+    def _set_thumbnail_size(self, width: int) -> None:
+        height = max(30, round(width * 0.75))
+        self.thumbnail_value.setText(str(width))
+        self.list.setIconSize(QSize(width, height))
+        self.list.set_nominal_cell_size(QSize(width + 20, height + 28))
+        if self.library is None:
+            return
+        for row in range(self.list.count()):
+            item = self.list.item(row)
+            piece_id = item.data(Qt.ItemDataRole.UserRole)
+            definition = self.library.pieces.get(piece_id)
+            if definition is not None:
+                item.setIcon(QIcon(piece_thumbnail(definition, width, height)))
 
     def _selected(self, item: QListWidgetItem | None) -> None:
         if item and item.data(Qt.ItemDataRole.UserRole):
@@ -208,7 +302,7 @@ class PropertiesPanel(QWidget):
             form.addRow(axis, spin)
         self.position[0].setRange(-1024, 1024)
         self.rotation = QComboBox()
-        self.rotation.addItems(["0", "90", "180", "270"])
+        self.rotation.addItems(["0", "45", "90", "135", "180", "225", "270", "315"])
         form.addRow("Rotation", self.rotation)
         self.color = QComboBox()
         self.set_palette(palette)
@@ -485,10 +579,64 @@ class ToolboxPanel(QWidget):
         self.buttons[key] = button
         return button
 
+class LayerButtonStrip(QWidget):
+    value_changed = Signal(int)
+
+    def __init__(self, minimum: int = -15, maximum: int = 14, value: int = 0) -> None:
+        super().__init__()
+        self.minimum = minimum
+        self.maximum = maximum
+        self.value = max(minimum, min(maximum, value))
+        self.layers = tuple(range(minimum, maximum + 1))
+        self.buttons: dict[int, QToolButton] = {}
+        self.setFixedWidth(40)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        self.button_group = QButtonGroup(self)
+        self.button_group.setExclusive(True)
+        for layer in self.layers:
+            button = QToolButton()
+            button.setText(str(layer))
+            button.setToolTip(f"Layer {layer}")
+            button.setCheckable(True)
+            button.setChecked(layer == self.value)
+            button.setMinimumHeight(0)
+            button.setMaximumHeight(24)
+            button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+            button.setStyleSheet(
+                """
+                QToolButton {
+                    background: #242a32;
+                    border: none;
+                    border-bottom: 1px solid #343d49;
+                    color: #9da9b8;
+                    padding: 0;
+                    font-size: 8px;
+                }
+                QToolButton:hover { background: #354251; color: #ffffff; }
+                QToolButton:checked { background: #2d78c4; color: #ffffff; font-weight: 600; }
+                """
+            )
+            button.clicked.connect(lambda _checked=False, selected=layer: self.set_value(selected))
+            self.button_group.addButton(button)
+            self.buttons[layer] = button
+            layout.addWidget(button, 1)
+
+    def set_value(self, value: int) -> None:
+        clamped = max(self.minimum, min(self.maximum, int(value)))
+        self.buttons[clamped].setChecked(True)
+        if clamped == self.value:
+            return
+        self.value = clamped
+        self.value_changed.emit(clamped)
+
+
 class ViewportPanel(QFrame):
     hide_requested = Signal()
 
-    def __init__(self, title: str, viewport: EditorViewport) -> None:
+    def __init__(self, title: str, viewport: EditorViewport, *, show_layer_buttons: bool = False) -> None:
         super().__init__()
         self.viewport = viewport
         self.setFrameShape(QFrame.Shape.StyledPanel)
@@ -509,7 +657,17 @@ class ViewportPanel(QFrame):
         hide_button.clicked.connect(self.hide_requested.emit)
         header_layout.addWidget(hide_button)
         layout.addWidget(header)
-        layout.addWidget(viewport, 1)
+        content = QWidget()
+        content_layout = QHBoxLayout(content)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(0)
+        self.layer_selector = LayerButtonStrip(value=viewport.current_layer) if show_layer_buttons else None
+        if self.layer_selector is not None:
+            self.layer_selector.value_changed.connect(viewport.set_layer)
+            viewport.layer_changed.connect(self.layer_selector.set_value)
+            content_layout.addWidget(self.layer_selector)
+        content_layout.addWidget(viewport, 1)
+        layout.addWidget(content, 1)
 
 
 class MainWindow(QMainWindow):
@@ -564,7 +722,7 @@ class MainWindow(QMainWindow):
         self.left_splitter.setStretchFactor(2, 1)
         self.left_splitter.setSizes([240, 130, 280])
 
-        self.front_panel = ViewportPanel("Front Editor", self.front_viewport)
+        self.front_panel = ViewportPanel("Front Editor", self.front_viewport, show_layer_buttons=True)
         self.view3d_panel = ViewportPanel("3D Brush", self.view3d)
         self.front_panel.hide_requested.connect(lambda: self._set_view_panel_visible("front", False))
         self.view3d_panel.hide_requested.connect(lambda: self._set_view_panel_visible("3d", False))
@@ -609,7 +767,7 @@ class MainWindow(QMainWindow):
         self.tool_group.setExclusive(True)
         self.tool_actions: dict[EditorTool, QToolButton] = {}
 
-        def add_tool(tool: EditorTool, key: str, title: str, row: int, column: int) -> None:
+        def add_tool(tool: EditorTool, key: str, title: str, shortcut: str, row: int, column: int) -> None:
             button = self.toolbox_panel.add_button(
                 key,
                 title,
@@ -620,21 +778,20 @@ class MainWindow(QMainWindow):
                 checkable=True,
                 checked=tool == EditorTool.PLACE,
             )
+            button.setShortcut(QKeySequence(shortcut))
+            button.setToolTip(f"{title} ({shortcut})")
             self.tool_group.addButton(button)
             self.tool_actions[tool] = button
 
-        add_tool(EditorTool.PLACE, "place", "Brush", 0, 0)
-        add_tool(EditorTool.ERASE, "erase", "Eraser", 0, 1)
-        add_tool(EditorTool.MOVE, "move", "Move", 0, 2)
+        add_tool(EditorTool.PLACE, "place", "Brush", "B", 0, 0)
+        add_tool(EditorTool.ERASE, "erase", "Eraser", "E", 0, 1)
+        add_tool(EditorTool.MOVE, "move", "Move", "M", 0, 2)
         self.toolbox_panel.add_button(
             "duplicate", "Duplicate", icons["duplicate"], self.viewport.duplicate_selection, 0, 3
         )
-        add_tool(EditorTool.SELECT, "select", "Select", 1, 0)
-        add_tool(EditorTool.BOX_SELECT, "box", "Box Select", 1, 1)
-        self.toolbox_panel.add_button(
-            "mirror", "Mirror", icons["mirror"], self.viewport.mirror_selection, 1, 2
-        )
-        add_tool(EditorTool.PAINT, "paint", "Paint", 1, 3)
+        self.toolbox_panel.buttons["duplicate"].setToolTip("Duplicate (Ctrl+D)")
+        add_tool(EditorTool.SELECT, "select", "Select", "P", 1, 0)
+        add_tool(EditorTool.PAINT, "paint", "Paint", "G", 1, 1)
         self.tool_actions[EditorTool.PLACE].setChecked(True)
 
     def _build_menu(self) -> None:
@@ -663,6 +820,10 @@ class MainWindow(QMainWindow):
         redo.setShortcut(QKeySequence.StandardKey.Redo)
         duplicate = edit_menu.addAction("Duplicate", self.viewport.duplicate_selection)
         duplicate.setShortcut(QKeySequence("Ctrl+D"))
+        rotate_clockwise = edit_menu.addAction("Rotate +45°", lambda: self.viewport.rotate_current(45))
+        rotate_clockwise.setShortcut(QKeySequence("R"))
+        rotate_counterclockwise = edit_menu.addAction("Rotate -45°", lambda: self.viewport.rotate_current(-45))
+        rotate_counterclockwise.setShortcut(QKeySequence("Shift+R"))
         delete = edit_menu.addAction("Delete", self.viewport.delete_selection)
         delete.setShortcut(QKeySequence.StandardKey.Delete)
 
@@ -675,7 +836,6 @@ class MainWindow(QMainWindow):
         self.view3d_panel_action = view_menu.addAction("Show 3D Panel")
         self.view3d_panel_action.setCheckable(True)
         self.view3d_panel_action.setChecked(True)
-        self.view3d_panel_action.setShortcut(QKeySequence("P"))
         self.view3d_panel_action.toggled.connect(lambda visible: self._set_view_panel_visible("3d", visible))
         center = view_menu.addAction("Center Views", self._center_views)
         center.setShortcut(QKeySequence("H"))
@@ -852,8 +1012,7 @@ class MainWindow(QMainWindow):
             if not library.pieces:
                 raise ValueError(f"Project piece library is unavailable: {library_path}")
             palette = tuple(PaletteColor.from_dict(item) for item in data["palette"])
-            saved_bounds = tuple(int(value) for value in data["bounds"])
-            bounds = (EDITOR_BOUNDS[0], EDITOR_BOUNDS[1], saved_bounds[2])
+            bounds = EDITOR_BOUNDS
             pieces = [PieceInstance.from_dict(item) for item in data["pieces"]]
             scene = Scene(library.pieces, bounds, pieces)  # type: ignore[arg-type]
         except (OSError, ValueError, KeyError, TypeError, PlacementError) as exc:
@@ -962,6 +1121,11 @@ def apply_dark_theme(app: QApplication) -> None:
         QLineEdit, QSpinBox, QComboBox, QListWidget, QTabWidget::pane {
             background: #1f242b; border: 1px solid #3b4350; padding: 3px;
         }
+        QListWidget#pieceLibraryGrid::item {
+            background: transparent; border: none; border-radius: 7px; padding: 4px;
+        }
+        QListWidget#pieceLibraryGrid::item:hover { background: rgba(255, 255, 255, 0.05); }
+        QListWidget#pieceLibraryGrid::item:selected { background: rgba(45, 120, 196, 0.38); }
         QPushButton { background: #343c48; border: 1px solid #4a5565; padding: 5px 9px; }
         QPushButton:hover { background: #414c5b; }
         QPushButton:pressed { background: #2d78c4; }

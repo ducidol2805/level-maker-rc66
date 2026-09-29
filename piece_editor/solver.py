@@ -65,6 +65,10 @@ class GreedySolver:
         seen: set[tuple[str, tuple[int, int, int]]] = set()
         for definition in piece_defs:
             for rotation in definition.allowed_rotations:
+                # Diagonal rotations use an axis-aligned occupancy envelope and
+                # therefore cannot provide an exact pixel-mask cover.
+                if rotation % 90:
+                    continue
                 size = definition.rotated_size(rotation)
                 key = (definition.id, size)
                 if key in seen:
@@ -102,9 +106,10 @@ class GreedySolver:
                         )
                     sx, sy, sz = candidate.size
                     y = height - 1 - row
+                    offset, _ = candidate.definition.rotated_bounds(candidate.rotation)
                     instance = PieceInstance(
                         piece_id=candidate.definition.id,
-                        position=(x, y, z),
+                        position=(x - offset[0], y - offset[1], z - offset[2]),
                         rotation=candidate.rotation,
                         color_id=color,
                         group_id=f"region_{int(regions[row, x])}",

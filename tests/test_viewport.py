@@ -4,9 +4,10 @@ import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import QEvent, QSettings, Qt
+from PySide6.QtCore import QEvent, QSettings, QSize, Qt
 from PySide6.QtGui import QKeyEvent
-from PySide6.QtWidgets import QApplication
+from PySide6.QtTest import QTest
+from PySide6.QtWidgets import QApplication, QListView
 from PySide6.QtWidgets import QSizePolicy
 
 from piece_editor.domain import DEFAULT_PALETTE, PieceDef, PieceInstance
@@ -121,6 +122,62 @@ def test_toolbox_palette_and_library_use_resizable_vertical_splitter() -> None:
     app.processEvents()
 
 
+def test_piece_library_uses_responsive_thumbnail_grid() -> None:
+    from piece_editor.library import PieceLibrary
+    from piece_editor.ui import PieceLibraryPanel
+
+    app = QApplication.instance() or QApplication([])
+    panel = PieceLibraryPanel()
+    library = PieceLibrary.load("library")
+
+    panel.set_library(library)
+    panel.resize(300, 500)
+    panel.show()
+    app.processEvents()
+
+    assert panel.list.viewMode() == QListView.ViewMode.IconMode
+    assert panel.list.resizeMode() == QListView.ResizeMode.Adjust
+    assert panel.list.movement() == QListView.Movement.Static
+    assert panel.list.iconSize() == QSize(64, 48)
+    assert panel.list.column_count == 3
+    assert panel.list.computed_spacing >= panel.list.MIN_SPACING
+    assert panel.list.verticalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAlwaysOn
+    assert panel.list.count() == len(library.pieces)
+    assert all(not panel.list.item(row).icon().isNull() for row in range(panel.list.count()))
+    assert panel.list.item(0).icon().pixmap(64, 48).toImage().pixelColor(0, 0).alpha() == 0
+    assert all(panel.list.item(row).data(Qt.ItemDataRole.UserRole) for row in range(panel.list.count()))
+    assert all("\n" not in panel.list.item(row).text() for row in range(panel.list.count()))
+    assert all("×" in panel.list.item(row).text() for row in range(panel.list.count()))
+    assert panel.list.MIN_CELL_WIDTH <= panel.list.cell_size.width() <= panel.list.MAX_CELL_WIDTH
+    assert all(panel.list.visualItemRect(panel.list.item(row)).size() == panel.list.cell_size for row in range(6))
+    assert panel.list.visualItemRect(panel.list.item(0)).y() == panel.list.visualItemRect(panel.list.item(2)).y()
+
+    panel.resize(480, 500)
+    app.processEvents()
+
+    assert panel.list.column_count == 5
+    assert all(panel.list.visualItemRect(panel.list.item(row)).size() == panel.list.cell_size for row in range(6))
+    assert panel.list.visualItemRect(panel.list.item(0)).y() == panel.list.visualItemRect(panel.list.item(4)).y()
+
+    panel.resize(250, 500)
+    app.processEvents()
+
+    assert panel.list.column_count == 2
+    assert panel.list.visualItemRect(panel.list.item(0)).y() == panel.list.visualItemRect(panel.list.item(1)).y()
+    assert all(panel.list.visualItemRect(panel.list.item(row)).size() == panel.list.cell_size for row in range(6))
+
+    panel.thumbnail_slider.setValue(80)
+    app.processEvents()
+
+    assert panel.thumbnail_value.text() == "80"
+    assert panel.list.iconSize() == QSize(80, 60)
+    assert panel.list.nominal_cell_size == QSize(100, 88)
+    assert panel.list.min_cell_width <= panel.list.cell_size.width() <= panel.list.max_cell_width
+    assert all(panel.list.visualItemRect(panel.list.item(row)).size() == panel.list.cell_size for row in range(6))
+    panel.deleteLater()
+    app.processEvents()
+
+
 def test_toolbox_buttons_fit_panel_in_requested_rows() -> None:
     from piece_editor.ui import MainWindow
     from PIL import Image
@@ -134,9 +191,7 @@ def test_toolbox_buttons_fit_panel_in_requested_rows() -> None:
         "paint",
         "select",
         "move",
-        "box",
         "duplicate",
-        "mirror",
     }
     expected_positions = {
         "place": (0, 0),
@@ -144,14 +199,20 @@ def test_toolbox_buttons_fit_panel_in_requested_rows() -> None:
         "move": (0, 2),
         "duplicate": (0, 3),
         "select": (1, 0),
-        "box": (1, 1),
-        "mirror": (1, 2),
-        "paint": (1, 3),
+        "paint": (1, 1),
     }
     for key, position in expected_positions.items():
         index = window.toolbox_panel.grid.indexOf(window.toolbox_panel.buttons[key])
         assert window.toolbox_panel.grid.getItemPosition(index)[:2] == position
-    assert window.toolbox_panel.grid.count() == 8
+    assert window.toolbox_panel.grid.count() == 6
+    assert {key: button.shortcut().toString() for key, button in window.toolbox_panel.buttons.items()} == {
+        "place": "B",
+        "erase": "E",
+        "move": "M",
+        "duplicate": "",
+        "select": "P",
+        "paint": "G",
+    }
     for button in window.toolbox_panel.buttons.values():
         assert button.sizePolicy().horizontalPolicy() == QSizePolicy.Policy.Expanding
         assert button.sizePolicy().verticalPolicy() == QSizePolicy.Policy.Expanding
@@ -164,8 +225,6 @@ def test_toolbox_buttons_fit_panel_in_requested_rows() -> None:
         "move": "tool_move.png",
         "duplicate": "tool_dup.png",
         "select": "tool_select.png",
-        "box": "tool_box.png",
-        "mirror": "tool_flip_H.png",
     }
     for key, filename in expected_icons.items():
         assert window.toolbox_icon_paths[key].name == filename
@@ -201,6 +260,41 @@ def test_front_and_3d_are_separate_hideable_center_panels() -> None:
     window._set_view_panel_visible("3d", True)
     assert not window.view3d_panel.isHidden()
     assert window.view3d_panel_action.isChecked()
+    window.close()
+    window.deleteLater()
+    app.processEvents()
+
+
+def test_front_layer_buttons_run_top_to_bottom_from_minus_fifteen_to_fourteen() -> None:
+    from piece_editor.ui import MainWindow
+
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow("library", persist_ui_state=False)
+    window.resize(1200, 760)
+    window.show()
+    app.processEvents()
+    selector = window.front_panel.layer_selector
+
+    assert selector is not None
+    assert (selector.minimum, selector.maximum, selector.value) == (-15, 14, 0)
+    assert selector.layers == tuple(range(-15, 15))
+    assert selector.layout().indexOf(selector.buttons[-15]) == 0
+    assert selector.layout().indexOf(selector.buttons[14]) == 29
+    assert selector.buttons[-15].y() < selector.buttons[14].y()
+    assert selector.buttons[0].isChecked()
+    assert window.front_viewport.current_layer == 0
+
+    QTest.mouseClick(selector.buttons[-15], Qt.MouseButton.LeftButton)
+    assert selector.value == -15
+    assert window.front_viewport.current_layer == -15
+
+    QTest.mouseClick(selector.buttons[14], Qt.MouseButton.LeftButton)
+    assert selector.value == 14
+    assert window.front_viewport.current_layer == 14
+
+    QTest.mouseClick(selector.buttons[0], Qt.MouseButton.LeftButton)
+    assert selector.value == 0
+    assert window.front_viewport.current_layer == 0
     window.close()
     window.deleteLater()
     app.processEvents()

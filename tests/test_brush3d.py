@@ -97,16 +97,16 @@ def test_screen_rays_support_perspective_ortho_and_iso_projection() -> None:
     assert not np.allclose(left, right)
 
 
-def test_piece_anchor_centers_tangent_axes_and_stays_outside_hit_face() -> None:
+def test_piece_anchor_uses_pivot_box_on_tangent_axes_and_stays_outside_hit_face() -> None:
     definition = PieceDef("shape", (2, 3, 4))
     target = (5, 6, 7)
 
-    assert piece_position_for_target(definition, 0, target, (1, 0, 0)) == (5, 5, 5)
-    assert piece_position_for_target(definition, 0, target, (-1, 0, 0)) == (4, 5, 5)
-    assert piece_position_for_target(definition, 0, target, (0, 1, 0)) == (4, 6, 5)
-    assert piece_position_for_target(definition, 0, target, (0, -1, 0)) == (4, 4, 5)
-    assert piece_position_for_target(definition, 0, target, (0, 0, 1)) == (4, 5, 7)
-    assert piece_position_for_target(definition, 0, target, (0, 0, -1)) == (4, 5, 4)
+    assert piece_position_for_target(definition, 0, target, (1, 0, 0)) == (5, 5, 7)
+    assert piece_position_for_target(definition, 0, target, (-1, 0, 0)) == (4, 5, 7)
+    assert piece_position_for_target(definition, 0, target, (0, 1, 0)) == (5, 6, 7)
+    assert piece_position_for_target(definition, 0, target, (0, -1, 0)) == (5, 4, 7)
+    assert piece_position_for_target(definition, 0, target, (0, 0, 1)) == (5, 5, 7)
+    assert piece_position_for_target(definition, 0, target, (0, 0, -1)) == (5, 5, 4)
 
 
 def test_locked_plane_line_interpolates_without_holes() -> None:
@@ -210,6 +210,11 @@ def test_hover_preview_does_not_mutate_scene() -> None:
     assert scene.pieces == []
     assert viewport.render_preview3d is not None
     assert viewport.render_preview3d.instance.position == (0, 0, 0)
+    viewport.keyPressEvent(QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_R, Qt.KeyboardModifier.NoModifier))
+    assert viewport.active_rotation == 45
+    assert viewport.render_preview3d is not None
+    assert viewport.render_preview3d.instance.rotation == 45
+    assert scene.pieces == []
     source_color = viewport._color(viewport.active_color_id)
     preview_color = viewport.render_preview3d.color
     assert all(
@@ -219,6 +224,28 @@ def test_hover_preview_does_not_mutate_scene() -> None:
             (source_color.redF(), source_color.greenF(), source_color.blueF()),
         )
     )
+    viewport.deleteLater()
+    app.processEvents()
+
+
+def test_rotated_ghost_rotation_is_used_for_3d_placement() -> None:
+    app = QApplication.instance() or QApplication([])
+    definition = PieceDef("bar", (2, 1, 1))
+    scene = Scene({"bar": definition})
+    viewport = EditorViewport(scene, DEFAULT_PALETTE)
+
+    before = viewport._candidate_for_target((0, 0, 0), (0, 1, 0))
+    viewport.keyPressEvent(QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_R, Qt.KeyboardModifier.NoModifier))
+    after = viewport._candidate_for_target((0, 0, 0), (0, 1, 0))
+    assert before is not None and after is not None
+    assert after.position == before.position
+    assert after.rotation == 45
+    viewport.brush_stroke3d = BrushStroke3D(EditorTool.PLACE, (0, 1, 0), 0.0)
+    viewport._apply_3d_cells(((0, 0, 0),))
+
+    assert len(scene.pieces) == 1
+    assert scene.pieces[0].rotation == 45
+    assert scene.cells_for(scene.pieces[0]) == ((-1, 0, -1), (0, 0, -1), (1, 0, -1), (-1, 0, 0), (0, 0, 0), (1, 0, 0), (-1, 0, 1), (0, 0, 1), (1, 0, 1))
     viewport.deleteLater()
     app.processEvents()
 
@@ -254,13 +281,25 @@ def test_viewport_scales_raycast_coordinates_for_high_dpi() -> None:
     app.processEvents()
 
 
-def test_magica_voxel_shortcuts_switch_shared_tool_state() -> None:
+def test_editor_shortcuts_switch_shared_tool_state_and_rotate_selection() -> None:
     app = QApplication.instance() or QApplication([])
-    viewport = EditorViewport(Scene({"cube": PieceDef("cube", (1, 1, 1))}), DEFAULT_PALETTE)
-    shortcuts = ((Qt.Key.Key_T, EditorTool.PLACE), (Qt.Key.Key_R, EditorTool.ERASE), (Qt.Key.Key_G, EditorTool.PAINT))
+    cube = PieceInstance("cube", (0, 0, 0), 0, 0)
+    viewport = EditorViewport(Scene({"cube": PieceDef("cube", (1, 1, 1))}, pieces=[cube]), DEFAULT_PALETTE)
+    shortcuts = (
+        (Qt.Key.Key_B, EditorTool.PLACE),
+        (Qt.Key.Key_E, EditorTool.ERASE),
+        (Qt.Key.Key_M, EditorTool.MOVE),
+        (Qt.Key.Key_P, EditorTool.SELECT),
+        (Qt.Key.Key_G, EditorTool.PAINT),
+    )
     for key, expected in shortcuts:
         viewport.keyPressEvent(QKeyEvent(QEvent.Type.KeyPress, key, Qt.KeyboardModifier.NoModifier))
         assert viewport.tool == expected
+    viewport.select_only(cube.instance_id)
+    viewport.keyPressEvent(QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_R, Qt.KeyboardModifier.NoModifier))
+    assert viewport.selected_pieces()[0].rotation == 45
+    viewport.keyPressEvent(QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_R, Qt.KeyboardModifier.ShiftModifier))
+    assert viewport.selected_pieces()[0].rotation == 0
     assert viewport._effective_3d_tool(Qt.KeyboardModifier.ShiftModifier) == EditorTool.PAINT
     viewport.set_tool(EditorTool.PLACE)
     assert viewport._effective_3d_tool(Qt.KeyboardModifier.ShiftModifier) == EditorTool.ERASE

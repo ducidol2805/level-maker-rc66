@@ -31,6 +31,17 @@ def test_library_scans_nested_piece_definitions(tmp_path) -> None:
     assert not library.warnings
 
 
+def test_bundled_library_pivots_follow_grid_box_rule() -> None:
+    library = PieceLibrary.load("library")
+
+    assert not library.warnings
+    for piece in library.pieces.values():
+        expected = tuple(value / 2.0 if value % 2 else 0.5 for value in piece.size)
+        if piece.category == "Ramps":
+            expected = (piece.size[0] - 0.5, expected[1], expected[2])
+        assert piece.pivot == expected
+
+
 def test_project_round_trip_and_minimal_game_export(tmp_path) -> None:
     definition = PieceDef("cube", (1, 1, 1))
     piece = PieceInstance("cube", (2, 3, 0), 90, 4, "head")

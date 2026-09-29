@@ -1,0 +1,9 @@
+{
+  "id": "arc_001",
+  "size": [2, 2, 1],
+  "pivot": [0.5, 0.5, 0.5],
+  "mesh": "../../models/ARC/ARC_001.fbx",
+  "allowed_rotations": [0, 45, 90, 135, 180, 225, 270, 315],
+  "category": "Arcs",
+  "tags": ["arc", "curve", "2x2x1"]
+}

@@ -20,9 +20,9 @@ cuboid generated from the piece's declared grid size.
 
 Editing commands now live in a responsive Toolbox above the Palette. Buttons
 fit the available panel width and height, with a centered icon and label below.
-The first row is Brush, Eraser, Move, and Duplicate; the second row is Select,
-Box Select, Mirror, and Paint. Toolbox artwork is loaded from `tool_icon/`;
-Mirror uses the horizontal flip asset.
+The first row is Brush, Eraser, Move, and Duplicate; the second row is Select
+and Paint. Box Select and Mirror are temporarily hidden. Toolbox artwork is
+loaded from `tool_icon/`.
 
 The Front Editor and 3D Brush are independent, resizable center panels backed
 by one shared editor document: scene, selection, active tool, active piece,
@@ -43,13 +43,17 @@ manually adjustable, and the new pixel sizes are saved on exit.
 - Eraser tool: left-click or drag to erase
 - Right-click or drag: erase the piece under each grid cell
 - Shift + click: add/remove a piece from selection
-- Q / E: rotate selection
+- B / E / M / P / G: Brush, Eraser, Move, Select, and Paint
+- R / Shift+R: rotate selection +45° / -45° around the Y axis
+- In Brush mode, R / Shift+R rotates the placement ghost and the placed piece uses that rotation
+- Rotation uses each piece's grid pivot: even axes use the outer corner box center (`0.5`), while odd axes use the center box
 - Delete: delete selection
 - Ctrl+D: duplicate selection
 - Ctrl+Z / Ctrl+Y: undo / redo
-- F / P: show or hide the Front / 3D panel
+- F: show or hide the Front panel; use the View menu for the 3D panel
 - H: center the Front origin near the bottom and reset the 3D camera
 - Mouse wheel: zoom
+- Front layer buttons: click one of 30 stacked buttons from -15 (top) to 14 (bottom); new scenes start on layer 0
 
 ## 3D Brush controls
 
@@ -57,7 +61,8 @@ manually adjustable, and the new pixel sizes are saved on exit.
 - Right-drag: orbit
 - Middle-drag: pan
 - Mouse wheel: zoom
-- T / R / G: Attach (Brush) / Erase / Paint
+- B / E / M / P / G: Brush, Eraser, Move, Select, and Paint
+- R / Shift+R: rotate selection +45° / -45° around the Y axis
 - Hold Shift with Attach or Erase: temporarily use the opposite operation
 - Select: click to replace selection; Shift-click to toggle a piece
 - H: reset the 3D camera
@@ -65,8 +70,8 @@ manually adjustable, and the new pixel sizes are saved on exit.
 Orbit sensitivity is intentionally reduced for more precise camera control.
 The 3D guide now uses a 1×1 horizontal floor grid, stronger 5-cell guide lines,
 and world axes; the old upright grid and the Toolbox `Layer Z` control have been removed. Depth is editable on
-both sides of the origin (`Z = -16` through `15` by default), while existing
-projects using non-negative Z coordinates remain valid.
+both sides of the origin (`Z = -15` through `14`), matching the fixed 30-cell
+depth of the construction canvas.
 
 Attach places the selected Piece Library item against the pointed face. On an
 empty scene or a missed object it uses the Y=0 construction floor. A drag locks
@@ -78,7 +83,7 @@ Erase/Paint targets without modifying scene or instance-cache data. Ghost
 geometry remains translucent but renders front faces only, preventing rear or
 interior polygons from bleeding through the visible shell.
 
-Move and Box Select remain Front-only in this milestone. If ModernGL cannot
+Move remains Front-only in this milestone; Box Select is temporarily hidden. If ModernGL cannot
 initialize, 3D editing is disabled and the viewport reports the renderer error;
 it never applies an edit through the fallback painter.
 
