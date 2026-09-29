@@ -1,4 +1,4 @@
-# Piece-Based Block Editor
+# Racblox
 
 A lightweight PySide6 editor for assembling static game pieces on an integer
 grid and reconstructing a front-facing block model from a reference image.
@@ -9,6 +9,16 @@ grid and reconstructing a front-facing block model from a reference image.
 python -m pip install -r requirements.txt
 python app.py
 ```
+
+## Build Windows app
+
+```powershell
+python -m pip install ".[dev]"
+python -m PyInstaller --noconfirm --clean Racblox.spec
+```
+
+The standalone app is written to `dist/Racblox.exe` with `app_icon.png` as its
+executable and window icon.
 
 The default library is `library/`; additional piece folders can be opened from
 **File > Open Piece Library**. Each piece folder contains a `piece.json` and an

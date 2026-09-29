@@ -3,7 +3,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from PySide6.QtGui import QSurfaceFormat
+from PySide6.QtGui import QIcon, QSurfaceFormat
 from PySide6.QtWidgets import QApplication
 
 from .ui import MainWindow, apply_dark_theme
@@ -19,8 +19,9 @@ def main() -> int:
     surface_format.setSamples(4)
     QSurfaceFormat.setDefaultFormat(surface_format)
     app = QApplication(sys.argv)
-    app.setApplicationName("Piece-Based Block Editor")
+    app.setApplicationName("Racblox")
     app.setOrganizationName("Local Tools")
+    app.setWindowIcon(QIcon(str(Path(__file__).resolve().parent.parent / "app_icon.png")))
     apply_dark_theme(app)
     default_library = Path(__file__).resolve().parent.parent / "library"
     window = MainWindow(default_library)

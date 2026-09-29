@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "piece-block-editor"
+name = "racblox"
 version = "0.1.0"
 description = "Grid-based piece editor with image-to-block reconstruction"
 requires-python = ">=3.11"
@@ -16,10 +16,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0"]
+dev = ["pytest>=8.0", "pyinstaller>=6.22"]
 
 [project.scripts]
-piece-editor = "piece_editor.app:main"
+racblox = "piece_editor.app:main"
 
 [tool.setuptools.packages.find]
 include = ["piece_editor*"]

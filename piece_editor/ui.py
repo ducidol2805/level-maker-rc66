@@ -681,7 +681,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.ui_settings = settings if settings is not None else QSettings()
         self.persist_ui_state = persist_ui_state
-        self.setWindowTitle("Piece-Based Block Editor")
+        self.setWindowTitle("Racblox")
         self.resize(1600, 900)
         self.project_path: Path | None = None
         self.dirty = False
@@ -934,7 +934,7 @@ class MainWindow(QMainWindow):
 
     def _update_title(self) -> None:
         name = self.project_path.name if self.project_path else "Untitled"
-        self.setWindowTitle(f"{'*' if self.dirty else ''}{name} — Piece-Based Block Editor")
+        self.setWindowTitle(f"{'*' if self.dirty else ''}{name} — Racblox")
 
     def _show_library_status(self) -> None:
         message = f"Loaded {len(self.library.pieces)} piece(s) from {self.library_path}"
