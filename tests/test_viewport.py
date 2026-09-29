@@ -123,6 +123,7 @@ def test_toolbox_palette_and_library_use_resizable_vertical_splitter() -> None:
 
 def test_toolbox_buttons_fit_panel_in_requested_rows() -> None:
     from piece_editor.ui import MainWindow
+    from PIL import Image
 
     app = QApplication.instance() or QApplication([])
     window = MainWindow("library", persist_ui_state=False)
@@ -130,6 +131,7 @@ def test_toolbox_buttons_fit_panel_in_requested_rows() -> None:
     assert set(window.toolbox_panel.buttons) == {
         "place",
         "erase",
+        "paint",
         "select",
         "move",
         "box",
@@ -144,10 +146,12 @@ def test_toolbox_buttons_fit_panel_in_requested_rows() -> None:
         "select": (1, 0),
         "box": (1, 1),
         "mirror": (1, 2),
+        "paint": (1, 3),
     }
     for key, position in expected_positions.items():
         index = window.toolbox_panel.grid.indexOf(window.toolbox_panel.buttons[key])
         assert window.toolbox_panel.grid.getItemPosition(index)[:2] == position
+    assert window.toolbox_panel.grid.count() == 8
     for button in window.toolbox_panel.buttons.values():
         assert button.sizePolicy().horizontalPolicy() == QSizePolicy.Policy.Expanding
         assert button.sizePolicy().verticalPolicy() == QSizePolicy.Policy.Expanding
@@ -156,6 +160,7 @@ def test_toolbox_buttons_fit_panel_in_requested_rows() -> None:
     expected_icons = {
         "place": "tool_brush.png",
         "erase": "tool_eraser.png",
+        "paint": "tool_paint.png",
         "move": "tool_move.png",
         "duplicate": "tool_dup.png",
         "select": "tool_select.png",
@@ -166,6 +171,9 @@ def test_toolbox_buttons_fit_panel_in_requested_rows() -> None:
         assert window.toolbox_icon_paths[key].name == filename
         assert window.toolbox_icon_paths[key].is_file()
         assert window.toolbox_panel.buttons[key].icon().cacheKey() == window.toolbox_icons[key].cacheKey()
+    with Image.open(window.toolbox_icon_paths["paint"]) as paint_icon:
+        assert paint_icon.size == (256, 256)
+        assert paint_icon.mode == "RGBA"
     window.close()
     window.deleteLater()
     app.processEvents()
@@ -181,10 +189,11 @@ def test_front_and_3d_are_separate_hideable_center_panels() -> None:
     assert window.view_splitter.widget(1) is window.view3d_panel
     assert window.front_viewport is not window.view3d
     assert window.front_viewport.scene is window.view3d.scene
+    assert window.front_viewport.document is window.view3d.document
     assert window.front_viewport.view_mode == ViewMode.FRONT
     assert window.view3d.view_mode == ViewMode.PERSPECTIVE
     assert not window.front_viewport.allow_3d
-    assert window.view3d.read_only
+    assert not window.view3d.read_only
 
     window._set_view_panel_visible("3d", False)
     assert window.view3d_panel.isHidden()
@@ -211,6 +220,7 @@ def test_window_geometry_splitters_and_panel_visibility_persist(tmp_path) -> Non
     first.workspace_splitter.setSizes([500, 240])
     first.left_splitter.setSizes([180, 110, 230])
     first.view_splitter.setSizes([430, 330])
+    first._set_view_panel_visible("front", True)
     first._set_view_panel_visible("3d", False)
     app.processEvents()
     expected_size = first.size()
@@ -243,6 +253,43 @@ def test_window_geometry_splitters_and_panel_visibility_persist(tmp_path) -> Non
     assert not second.front_panel.isHidden()
     second.close()
     second.deleteLater()
+    app.processEvents()
+
+
+def test_old_ui_settings_migrate_once_to_default_3d_only_layout(tmp_path) -> None:
+    from piece_editor.ui import MainWindow, UI_LAYOUT_VERSION
+
+    app = QApplication.instance() or QApplication([])
+    settings_path = tmp_path / "old-ui-state.ini"
+    settings = QSettings(str(settings_path), QSettings.Format.IniFormat)
+    settings.setValue("ui/layout_version", UI_LAYOUT_VERSION - 1)
+    settings.setValue("ui/front_panel_visible", True)
+    settings.setValue("ui/3d_panel_visible", False)
+    settings.sync()
+
+    migrated = MainWindow("library", settings=settings)
+    migrated.show()
+    app.processEvents()
+    assert migrated.front_panel.isHidden()
+    assert not migrated.view3d_panel.isHidden()
+    migrated.close()
+    migrated.deleteLater()
+    app.processEvents()
+
+    saved = QSettings(str(settings_path), QSettings.Format.IniFormat)
+    assert saved.value("ui/layout_version", type=int) == UI_LAYOUT_VERSION
+    assert not saved.value("ui/front_panel_visible", type=bool)
+    assert saved.value("ui/3d_panel_visible", type=bool)
+
+    restored = MainWindow("library", settings=saved)
+    restored.show()
+    app.processEvents()
+    assert restored.front_panel.isHidden()
+    assert not restored.view3d_panel.isHidden()
+    restored._set_view_panel_visible("front", True)
+    assert not restored.front_panel.isHidden()
+    restored.close()
+    restored.deleteLater()
     app.processEvents()
 
 

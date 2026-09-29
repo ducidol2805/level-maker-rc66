@@ -18,9 +18,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from .brush3d import BrushStroke3D, cell_on_stroke_plane, grid_line_on_plane, piece_position_for_target, stroke_from_hit
 from .domain import PaletteColor, PieceInstance
-from .renderer3d import ModernGLSceneRenderer, RenderStats
-from .scene import PlacementError, Scene, SceneHistory
+from .document import EditorDocument, EditorTool
+from .renderer3d import ModernGLSceneRenderer, RayHit, RenderPreview, RenderStats
+from .scene import PlacementError, Scene
 
 
 _UNCHANGED = object()
@@ -128,14 +130,6 @@ class RendererPanel(QFrame):
             self.projection_buttons[mode].setChecked(True)
 
 
-class EditorTool(str, Enum):
-    PLACE = "Place"
-    ERASE = "Eraser"
-    SELECT = "Select"
-    MOVE = "Move"
-    BOX_SELECT = "Box Select"
-
-
 class ViewMode(str, Enum):
     FRONT = "Front"
     PERSPECTIVE = "Perspective"
@@ -148,7 +142,7 @@ class EditorViewport(QOpenGLWidget):
 
     def __init__(
         self,
-        scene: Scene,
+        scene: Scene | EditorDocument,
         palette: tuple[PaletteColor, ...],
         parent: QWidget | None = None,
         *,
@@ -158,17 +152,12 @@ class EditorViewport(QOpenGLWidget):
         super().__init__(parent)
         self.allow_3d = allow_3d
         self.read_only = read_only
-        self.scene = scene
-        self.history = SceneHistory(scene)
+        self.document = scene if isinstance(scene, EditorDocument) else EditorDocument(scene, palette[0].id)
         self.palette = palette
-        self.tool = EditorTool.PLACE
         self.view_mode = ViewMode.FRONT
         self.shading_mode = "pbr"
         self.projection_mode = "perspective"
-        self.active_piece_id = next(iter(scene.piece_defs), "")
-        self.active_color_id = palette[0].id
         self.current_layer = 0
-        self.selection: set[str] = set()
         self.cell_size = 28.0
         self.offset = QPointF(54.0, 0.0)
         self.hover_cell: tuple[int, int] | None = None
@@ -183,6 +172,9 @@ class EditorViewport(QOpenGLWidget):
         self.camera_drag_last: QPoint | None = None
         self.camera_drag_button: Qt.MouseButton | None = None
         self.camera_drag_moved = False
+        self.brush_stroke3d: BrushStroke3D | None = None
+        self.hover_hit3d: RayHit | None = None
+        self.render_preview3d: RenderPreview | None = None
         self.renderer3d: ModernGLSceneRenderer | None = None
         self.renderer3d_error: str | None = None
         self._perspective_hits: list[tuple[QPolygonF, str]] = []
@@ -190,9 +182,75 @@ class EditorViewport(QOpenGLWidget):
         self.renderer_panel.shader_changed.connect(self.set_shading_mode)
         self.renderer_panel.projection_changed.connect(self.set_projection_mode)
         self.renderer_panel.hide()
+        self.document.scene_changed.connect(self._document_scene_changed)
+        self.document.selection_changed.connect(self._document_selection_changed)
+        self.document.tool_changed.connect(self._document_tool_changed)
+        self.document.active_piece_changed.connect(self._document_brush_changed)
+        self.document.active_color_changed.connect(self._document_brush_changed)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.setMouseTracking(True)
         self.setMinimumSize(320, 320)
+
+    @property
+    def scene(self) -> Scene:
+        return self.document.scene
+
+    @property
+    def history(self):
+        return self.document.history
+
+    @property
+    def tool(self) -> EditorTool:
+        return self.document.tool
+
+    @property
+    def active_piece_id(self) -> str:
+        return self.document.active_piece_id
+
+    @active_piece_id.setter
+    def active_piece_id(self, value: str) -> None:
+        self.document.set_active_piece(value)
+
+    @property
+    def active_color_id(self) -> int:
+        return self.document.active_color_id
+
+    @active_color_id.setter
+    def active_color_id(self, value: int) -> None:
+        self.document.set_active_color(value)
+
+    @property
+    def selection(self) -> set[str]:
+        return self.document.selection
+
+    @selection.setter
+    def selection(self, value: set[str]) -> None:
+        self.document.set_selection(value)
+
+    def _document_scene_changed(self) -> None:
+        self.render_preview3d = None
+        self.scene_changed.emit()
+        self.update()
+
+    def _document_selection_changed(self) -> None:
+        self.selection_changed.emit()
+        self.update()
+
+    def _document_tool_changed(self, tool: object) -> None:
+        selected = tool if isinstance(tool, EditorTool) else self.document.tool
+        self.render_preview3d = None
+        self.hover_hit3d = None
+        self.setCursor(
+            Qt.CursorShape.CrossCursor
+            if selected in (EditorTool.PLACE, EditorTool.ERASE, EditorTool.PAINT)
+            else Qt.CursorShape.ArrowCursor
+        )
+        self.update()
+
+    def _document_brush_changed(self, _value: object) -> None:
+        self.render_preview3d = None
+        self.hover_hit3d = None
+        self.update()
 
     def resizeEvent(self, event) -> None:  # noqa: N802
         if self.offset.y() == 0:
@@ -223,14 +281,9 @@ class EditorViewport(QOpenGLWidget):
             self.renderer3d.resize(width, height, self.devicePixelRatioF())
 
     def set_scene(self, scene: Scene) -> None:
-        self.scene = scene
-        self.history = SceneHistory(scene)
+        self.document.reset_scene(scene)
         if self.renderer3d:
             self.renderer3d.reset_camera(scene)
-        self.selection.clear()
-        self.selection_changed.emit()
-        self.scene_changed.emit()
-        self.update()
 
     def set_palette(self, palette: tuple[PaletteColor, ...]) -> None:
         self.palette = palette
@@ -239,17 +292,15 @@ class EditorViewport(QOpenGLWidget):
         self.update()
 
     def set_tool(self, tool: EditorTool) -> None:
-        self.tool = tool
-        self.setCursor(
-            Qt.CursorShape.CrossCursor
-            if tool in (EditorTool.PLACE, EditorTool.ERASE)
-            else Qt.CursorShape.ArrowCursor
-        )
-        self.update()
+        self.document.set_tool(tool)
 
     def set_view_mode(self, mode: ViewMode) -> None:
         if mode == ViewMode.PERSPECTIVE and not self.allow_3d:
             return
+        if self.brush_stroke3d is not None:
+            self.document.end_stroke()
+            self.brush_stroke3d = None
+        self.render_preview3d = None
         self.view_mode = mode
         self.renderer_panel.setVisible(mode == ViewMode.PERSPECTIVE)
         if mode == ViewMode.PERSPECTIVE:
@@ -293,24 +344,19 @@ class EditorViewport(QOpenGLWidget):
         self.update()
 
     def set_layer(self, layer: int) -> None:
-        self.current_layer = max(0, min(self.scene.bounds[2] - 1, layer))
+        self.current_layer = max(self.scene.min_z, min(self.scene.max_z - 1, layer))
         self.update()
 
     def selected_pieces(self) -> list[PieceInstance]:
         return [piece for piece in self.scene.pieces if piece.instance_id in self.selection]
 
     def select_only(self, instance_id: str | None) -> None:
-        self.selection = {instance_id} if instance_id else set()
-        self.selection_changed.emit()
-        self.update()
+        self.document.set_selection({instance_id} if instance_id else set())
 
     def delete_selection(self) -> None:
         if not self.selection:
             return
-        self.history.checkpoint()
-        self.scene.remove_many(self.selection)
-        self.selection.clear()
-        self._changed()
+        self.document.remove_ids(self.selection)
 
     def rotate_selection(self, delta: int) -> None:
         pieces = self.selected_pieces()
@@ -355,13 +401,13 @@ class EditorViewport(QOpenGLWidget):
             # Validate as a batch against both the scene and other copies.
             simulation = Scene(self.scene.piece_defs, self.scene.bounds, list(self.scene.pieces))
             simulation.add_many(copies)
-            self.history.checkpoint()
-            self.scene.add_many(copies)
+            added, errors = self.document.add_instances(copies)
+            if errors:
+                raise errors[0]
         except PlacementError as exc:
             self.status_message.emit(str(exc))
             return
-        self.selection = {piece.instance_id for piece in copies}
-        self._changed()
+        self.document.set_selection(piece.instance_id for piece in added)
 
     def mirror_selection(self) -> None:
         pieces = self.selected_pieces()
@@ -413,26 +459,17 @@ class EditorViewport(QOpenGLWidget):
 
     def replace_all(self, pieces: list[PieceInstance]) -> bool:
         try:
-            candidate = Scene(self.scene.piece_defs, self.scene.bounds, pieces)
+            self.document.replace_all(pieces)
         except PlacementError as exc:
             self.status_message.emit(str(exc))
             return False
-        self.history.checkpoint()
-        self.scene.clear()
-        self.scene.add_many(candidate.pieces)
-        self.selection.clear()
-        self._changed()
         return True
 
     def undo(self) -> None:
-        if self.history.undo():
-            self.selection.intersection_update(piece.instance_id for piece in self.scene.pieces)
-            self._changed()
+        self.document.undo()
 
     def redo(self) -> None:
-        if self.history.redo():
-            self.selection.intersection_update(piece.instance_id for piece in self.scene.pieces)
-            self._changed()
+        self.document.redo()
 
     def paintGL(self) -> None:  # noqa: N802
         if self.view_mode == ViewMode.FRONT:
@@ -458,6 +495,7 @@ class EditorViewport(QOpenGLWidget):
                     self.selection,
                     self.defaultFramebufferObject(),
                     self.shading_mode,
+                    self.render_preview3d,
                 )
                 self.renderer3d.context.finish()
                 painter.endNativePainting()
@@ -586,7 +624,7 @@ class EditorViewport(QOpenGLWidget):
                 painter.drawPolygon(front)
             self._perspective_hits.append((front.united(side).united(top), piece.instance_id))
         painter.setPen(QColor("#aab2bf"))
-        painter.drawText(16, 26, "Perspective preview — switch to Front (F) to edit")
+        painter.drawText(16, 26, "3D Brush requires an active OpenGL 3.3 renderer")
 
     @staticmethod
     def _iso_point(x: int, y: int, z: int, origin: QPointF, scale: float) -> QPointF:
@@ -611,28 +649,22 @@ class EditorViewport(QOpenGLWidget):
 
     def mousePressEvent(self, event: QMouseEvent) -> None:  # noqa: N802
         self.setFocus()
-        if self.view_mode == ViewMode.PERSPECTIVE and event.button() in (
-            Qt.MouseButton.LeftButton,
-            Qt.MouseButton.MiddleButton,
-        ):
+        if self.view_mode == ViewMode.PERSPECTIVE:
             point = event.position().toPoint()
-            self.camera_drag_start = point
-            self.camera_drag_last = point
-            self.camera_drag_button = event.button()
-            self.camera_drag_moved = False
+            if event.button() in (Qt.MouseButton.RightButton, Qt.MouseButton.MiddleButton):
+                self.camera_drag_start = point
+                self.camera_drag_last = point
+                self.camera_drag_button = event.button()
+                self.camera_drag_moved = False
+            elif event.button() == Qt.MouseButton.LeftButton:
+                if self.tool in (EditorTool.PLACE, EditorTool.ERASE, EditorTool.PAINT):
+                    self._begin_3d_stroke(point, event.modifiers())
+                else:
+                    self._select_3d(point, event.modifiers())
             return
         if event.button() == Qt.MouseButton.MiddleButton:
             self.pan_start = event.position().toPoint()
             return
-        if self.view_mode == ViewMode.PERSPECTIVE:
-            if event.button() != Qt.MouseButton.LeftButton:
-                return
-            for polygon, instance_id in reversed(self._perspective_hits):
-                if polygon.containsPoint(event.position(), Qt.FillRule.OddEvenFill):
-                    self.select_only(instance_id)
-                    return
-            return
-
         cell = self._screen_to_grid(event.position().toPoint())
         if event.button() == Qt.MouseButton.RightButton:
             self._begin_paint_stroke(Qt.MouseButton.RightButton, cell)
@@ -649,12 +681,12 @@ class EditorViewport(QOpenGLWidget):
             piece = self.scene.piece_at((cell[0], cell[1], self.current_layer))
             if event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
                 if piece:
+                    selection = set(self.selection)
                     if piece.instance_id in self.selection:
-                        self.selection.remove(piece.instance_id)
+                        selection.remove(piece.instance_id)
                     else:
-                        self.selection.add(piece.instance_id)
-                    self.selection_changed.emit()
-                    self.update()
+                        selection.add(piece.instance_id)
+                    self.document.set_selection(selection)
             else:
                 if not piece or piece.instance_id not in self.selection:
                     self.select_only(piece.instance_id if piece else None)
@@ -663,18 +695,24 @@ class EditorViewport(QOpenGLWidget):
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:  # noqa: N802
         point = event.position().toPoint()
-        if self.view_mode == ViewMode.PERSPECTIVE and self.camera_drag_last and self.renderer3d:
-            delta = point - self.camera_drag_last
-            if abs(point.x() - self.camera_drag_start.x()) + abs(point.y() - self.camera_drag_start.y()) > 3:
-                self.camera_drag_moved = True
-            if self.camera_drag_button == Qt.MouseButton.LeftButton:
-                if self.projection_mode == "iso" and (delta.x() or delta.y()):
-                    self.set_projection_mode("orthographic")
-                self.renderer3d.camera.orbit(delta.x(), delta.y())
-            elif self.camera_drag_button == Qt.MouseButton.MiddleButton:
-                self.renderer3d.camera.pan(delta.x(), delta.y())
-            self.camera_drag_last = point
-            self.update()
+        if self.view_mode == ViewMode.PERSPECTIVE:
+            if self.camera_drag_last and self.renderer3d:
+                delta = point - self.camera_drag_last
+                assert self.camera_drag_start is not None
+                if abs(point.x() - self.camera_drag_start.x()) + abs(point.y() - self.camera_drag_start.y()) > 3:
+                    self.camera_drag_moved = True
+                if self.camera_drag_button == Qt.MouseButton.RightButton:
+                    if self.projection_mode == "iso" and (delta.x() or delta.y()):
+                        self.set_projection_mode("orthographic")
+                    self.renderer3d.camera.orbit(delta.x(), delta.y())
+                elif self.camera_drag_button == Qt.MouseButton.MiddleButton:
+                    self.renderer3d.camera.pan(delta.x(), delta.y())
+                self.camera_drag_last = point
+                self.update()
+            elif self.brush_stroke3d and event.buttons() & Qt.MouseButton.LeftButton:
+                self._continue_3d_stroke(point)
+            else:
+                self._update_3d_hover(point, event.modifiers())
             return
         if self.pan_start:
             delta = point - self.pan_start
@@ -693,31 +731,16 @@ class EditorViewport(QOpenGLWidget):
             self.update()
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:  # noqa: N802
-        if self.view_mode == ViewMode.PERSPECTIVE and event.button() == self.camera_drag_button:
-            if (
-                event.button() == Qt.MouseButton.LeftButton
-                and not self.camera_drag_moved
-                and self.renderer3d
-            ):
-                ratio = self.devicePixelRatioF()
-                instance_id = self.renderer3d.pick(
-                    event.position().x() * ratio,
-                    event.position().y() * ratio,
-                    self.scene,
-                )
-                if event.modifiers() & Qt.KeyboardModifier.ShiftModifier and instance_id:
-                    if instance_id in self.selection:
-                        self.selection.remove(instance_id)
-                    else:
-                        self.selection.add(instance_id)
-                    self.selection_changed.emit()
-                    self.update()
-                else:
-                    self.select_only(instance_id)
-            self.camera_drag_start = None
-            self.camera_drag_last = None
-            self.camera_drag_button = None
-            self.camera_drag_moved = False
+        if self.view_mode == ViewMode.PERSPECTIVE:
+            if event.button() == self.camera_drag_button:
+                self.camera_drag_start = None
+                self.camera_drag_last = None
+                self.camera_drag_button = None
+                self.camera_drag_moved = False
+            elif event.button() == Qt.MouseButton.LeftButton and self.brush_stroke3d:
+                self.document.end_stroke()
+                self.brush_stroke3d = None
+                self._update_3d_hover(event.position().toPoint(), event.modifiers())
             return
         if event.button() == Qt.MouseButton.MiddleButton:
             self.pan_start = None
@@ -746,6 +769,175 @@ class EditorViewport(QOpenGLWidget):
                 }
                 self._apply_replacements(replacements)
 
+    def _effective_3d_tool(self, modifiers: Qt.KeyboardModifier) -> EditorTool:
+        if modifiers & Qt.KeyboardModifier.ShiftModifier:
+            if self.tool == EditorTool.PLACE:
+                return EditorTool.ERASE
+            if self.tool == EditorTool.ERASE:
+                return EditorTool.PLACE
+        return self.tool
+
+    def _screen_ray_3d(self, point: QPoint) -> tuple[object, object] | None:
+        if self.renderer3d is None:
+            return None
+        ratio = self.devicePixelRatioF()
+        self.renderer3d.resize(self.width(), self.height(), ratio)
+        return self.renderer3d.screen_ray(point.x() * ratio, point.y() * ratio)
+
+    def _raycast_3d(self, point: QPoint, include_ground: bool) -> RayHit | None:
+        if self.renderer3d is None:
+            return None
+        ratio = self.devicePixelRatioF()
+        self.renderer3d.resize(self.width(), self.height(), ratio)
+        return self.renderer3d.raycast_grid(
+            point.x() * ratio,
+            point.y() * ratio,
+            self.scene,
+            include_ground=include_ground,
+        )
+
+    def _select_3d(self, point: QPoint, modifiers: Qt.KeyboardModifier) -> None:
+        hit = self._raycast_3d(point, include_ground=False)
+        instance_id = hit.instance_id if hit else None
+        if modifiers & Qt.KeyboardModifier.ShiftModifier and instance_id:
+            selection = set(self.selection)
+            if instance_id in selection:
+                selection.remove(instance_id)
+            else:
+                selection.add(instance_id)
+            self.document.set_selection(selection)
+        else:
+            self.select_only(instance_id)
+
+    @staticmethod
+    def _target_cell_from_hit(hit: RayHit, mode: EditorTool) -> tuple[int, int, int]:
+        if mode != EditorTool.PLACE or hit.ground:
+            return hit.cell
+        return tuple(hit.cell[index] + hit.normal[index] for index in range(3))  # type: ignore[return-value]
+
+    def _candidate_for_target(
+        self,
+        target_cell: tuple[int, int, int],
+        normal: tuple[int, int, int],
+    ) -> PieceInstance | None:
+        definition = self.scene.piece_defs.get(self.active_piece_id)
+        if definition is None:
+            return None
+        rotation = definition.allowed_rotations[0]
+        position = piece_position_for_target(definition, rotation, target_cell, normal)
+        return PieceInstance(definition.id, position, rotation, self.active_color_id)
+
+    def _begin_3d_stroke(self, point: QPoint, modifiers: Qt.KeyboardModifier) -> None:
+        if self.read_only or self.renderer3d is None:
+            self.status_message.emit("3D brush unavailable: OpenGL renderer is not active")
+            return
+        mode = self._effective_3d_tool(modifiers)
+        hit = self._raycast_3d(point, include_ground=mode == EditorTool.PLACE)
+        if hit is None or (mode != EditorTool.PLACE and hit.instance_id is None):
+            return
+        self.brush_stroke3d = stroke_from_hit(mode, hit)
+        self.document.begin_stroke()
+        cell = self._target_cell_from_hit(hit, mode)
+        self._apply_3d_cells((cell,))
+        self.brush_stroke3d.last_cell = cell
+
+    def _continue_3d_stroke(self, point: QPoint) -> None:
+        stroke = self.brush_stroke3d
+        ray = self._screen_ray_3d(point)
+        if stroke is None or ray is None:
+            return
+        origin, direction = ray
+        cell = cell_on_stroke_plane(origin, direction, stroke)  # type: ignore[arg-type]
+        if cell is None or cell == stroke.last_cell:
+            return
+        cells = (cell,) if stroke.last_cell is None else grid_line_on_plane(stroke.last_cell, cell, stroke.normal)[1:]
+        self._apply_3d_cells(cells)
+        stroke.last_cell = cell
+
+    def _apply_3d_cells(self, cells) -> None:
+        stroke = self.brush_stroke3d
+        if stroke is None:
+            return
+        if stroke.mode == EditorTool.PLACE:
+            candidates: list[PieceInstance] = []
+            for cell in cells:
+                candidate = self._candidate_for_target(cell, stroke.normal)
+                if candidate is None or candidate.position in stroke.placed_positions:
+                    continue
+                stroke.placed_positions.add(candidate.position)
+                candidates.append(candidate)
+            if not candidates:
+                return
+            _, errors = self.document.add_instances(candidates)
+            if errors:
+                self.status_message.emit(str(errors[-1]))
+            return
+
+        instance_ids: list[str] = []
+        for cell in cells:
+            instance_id = self.scene.instance_id_at(cell)
+            if instance_id is None or instance_id in stroke.affected_ids:
+                continue
+            stroke.affected_ids.add(instance_id)
+            instance_ids.append(instance_id)
+        if stroke.mode == EditorTool.ERASE:
+            self.document.remove_ids(instance_ids)
+        elif stroke.mode == EditorTool.PAINT:
+            replacements = {
+                instance_id: replace(piece, color_id=self.active_color_id)
+                for instance_id in instance_ids
+                if (piece := self.scene.piece_by_id(instance_id)) is not None
+                and piece.color_id != self.active_color_id
+            }
+            try:
+                self.document.replace_many(replacements)
+            except PlacementError as exc:
+                self.status_message.emit(str(exc))
+
+    def _update_3d_hover(self, point: QPoint, modifiers: Qt.KeyboardModifier) -> None:
+        if self.renderer3d is None or self.brush_stroke3d is not None:
+            return
+        mode = self._effective_3d_tool(modifiers)
+        if mode not in (EditorTool.PLACE, EditorTool.ERASE, EditorTool.PAINT):
+            self.hover_hit3d = None
+            self.render_preview3d = None
+            self.update()
+            return
+        hit = self._raycast_3d(point, include_ground=mode == EditorTool.PLACE)
+        self.hover_hit3d = hit
+        preview: RenderPreview | None = None
+        if hit is not None and mode == EditorTool.PLACE:
+            target = self._target_cell_from_hit(hit, mode)
+            candidate = self._candidate_for_target(target, hit.normal)
+            if candidate is not None:
+                try:
+                    self.scene.validate(candidate)
+                    color = self._preview_rgba(self.active_color_id, 0.52)
+                except PlacementError:
+                    color = (0.95, 0.12, 0.12, 0.58)
+                preview = RenderPreview(candidate, color)
+        elif hit is not None and hit.instance_id:
+            piece = self.scene.piece_by_id(hit.instance_id)
+            if piece is not None:
+                color = (
+                    (0.95, 0.12, 0.12, 0.58)
+                    if mode == EditorTool.ERASE
+                    else self._preview_rgba(self.active_color_id, 0.62)
+                )
+                preview = RenderPreview(piece, color)
+        self.render_preview3d = preview
+        self.update()
+
+    def _preview_rgba(self, color_id: int, alpha: float) -> tuple[float, float, float, float]:
+        color = self._color(color_id)
+        white_tint = 0.20
+        return (
+            color.redF() + (1.0 - color.redF()) * white_tint,
+            color.greenF() + (1.0 - color.greenF()) * white_tint,
+            color.blueF() + (1.0 - color.blueF()) * white_tint,
+            alpha,
+        )
+
     def wheelEvent(self, event: QWheelEvent) -> None:  # noqa: N802
         if self.view_mode == ViewMode.PERSPECTIVE and self.renderer3d:
             self.renderer3d.camera.zoom(event.angleDelta().y() / 120.0)
@@ -763,6 +955,12 @@ class EditorViewport(QOpenGLWidget):
     def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802
         if event.key() == Qt.Key.Key_H:
             self.center_view()
+        elif event.key() == Qt.Key.Key_T:
+            self.set_tool(EditorTool.PLACE)
+        elif event.key() == Qt.Key.Key_R:
+            self.set_tool(EditorTool.ERASE)
+        elif event.key() == Qt.Key.Key_G:
+            self.set_tool(EditorTool.PAINT)
         elif self.read_only:
             super().keyPressEvent(event)
         elif event.key() == Qt.Key.Key_Delete:
@@ -782,6 +980,7 @@ class EditorViewport(QOpenGLWidget):
         self.paint_button = button
         self.last_paint_cell = None
         self._stroke_checkpointed = False
+        self.document.begin_stroke()
         self._continue_paint_stroke(cell)
 
     def _continue_paint_stroke(self, cell: tuple[int, int]) -> None:
@@ -801,11 +1000,12 @@ class EditorViewport(QOpenGLWidget):
         self.paint_button = None
         self.last_paint_cell = None
         self._stroke_checkpointed = False
+        self.document.end_stroke()
 
     def _checkpoint_paint_stroke(self) -> None:
-        if not self._stroke_checkpointed:
-            self.history.checkpoint()
-            self._stroke_checkpointed = True
+        # Kept for the front-view stroke path; EditorDocument lazily creates
+        # one checkpoint on the first successful mutation.
+        self._stroke_checkpointed = True
 
     @staticmethod
     def _grid_line(start: tuple[int, int], end: tuple[int, int]) -> list[tuple[int, int]]:
@@ -842,23 +1042,18 @@ class EditorViewport(QOpenGLWidget):
             self.active_color_id,
         )
         try:
-            self.scene.validate(instance)
-            self._checkpoint_paint_stroke()
-            self.scene.add(instance)
+            added, errors = self.document.add_instances((instance,))
         except PlacementError as exc:
             self.status_message.emit(str(exc))
             return
-        self.selection.clear()
-        self._changed()
+        if not added and errors:
+            self.status_message.emit(str(errors[0]))
 
     def _erase_at(self, cell: tuple[int, int]) -> None:
         piece = self.scene.piece_at((cell[0], cell[1], self.current_layer))
         if piece is None:
             return
-        self._checkpoint_paint_stroke()
-        self.scene.remove_many((piece.instance_id,))
-        self.selection.discard(piece.instance_id)
-        self._changed()
+        self.document.remove_ids((piece.instance_id,))
 
     def _complete_box_select(self) -> None:
         assert self.box_start and self.box_end
@@ -870,24 +1065,14 @@ class EditorViewport(QOpenGLWidget):
             if piece.position[2] <= self.current_layer < piece.position[2] + sz:
                 if screen_rect.intersects(self._grid_rect(piece.position[0], piece.position[1], sx, sy)):
                     selected.add(piece.instance_id)
-        self.selection = selected
-        self.selection_changed.emit()
+        self.document.set_selection(selected)
 
     def _apply_replacements(self, replacements: dict[str, PieceInstance]) -> None:
         if not replacements:
             return
         try:
-            simulation = Scene(self.scene.piece_defs, self.scene.bounds, list(self.scene.pieces))
-            simulation.replace_many(replacements)
-            self.history.checkpoint()
-            self.scene.replace_many(replacements)
+            self.document.replace_many(replacements)
         except PlacementError as exc:
             self.status_message.emit(str(exc))
             return
-        self._changed()
-
-    def _changed(self) -> None:
-        self.selection_changed.emit()
-        self.scene_changed.emit()
-        self.update()
 

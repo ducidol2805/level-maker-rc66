@@ -39,12 +39,16 @@ from PySide6.QtWidgets import (
 )
 
 from .domain import DEFAULT_PALETTE, PaletteColor, PieceInstance, load_default_palette
+from .document import EditorDocument, EditorTool
 from .io import export_game, import_game_data, load_project_data, save_project
 from .library import PieceLibrary
 from .reconstruction import ReconstructionResult, ReconstructionSettings, reconstruct_image
 from .scene import EDITOR_BOUNDS, PlacementError, Scene
 from .solver import GreedySolver, SolverError
-from .viewport import EditorTool, EditorViewport, ViewMode
+from .viewport import EditorViewport, ViewMode
+
+
+UI_LAYOUT_VERSION = 2
 
 
 class ReferenceDrop(QFrame):
@@ -222,7 +226,7 @@ class PropertiesPanel(QWidget):
     def set_scene_bounds(self, scene: Scene) -> None:
         self.position[0].setRange(scene.min_x, scene.max_x - 1)
         self.position[1].setRange(0, scene.bounds[1] - 1)
-        self.position[2].setRange(0, scene.bounds[2] - 1)
+        self.position[2].setRange(scene.min_z, scene.max_z - 1)
 
     def set_palette(self, palette: tuple[PaletteColor, ...]) -> None:
         self.color.clear()
@@ -481,14 +485,6 @@ class ToolboxPanel(QWidget):
         self.buttons[key] = button
         return button
 
-    def add_layer_control(self, spin: QSpinBox) -> None:
-        container = QWidget()
-        layout = QHBoxLayout(container)
-        layout.setContentsMargins(4, 4, 4, 4)
-        layout.addWidget(QLabel("Layer Z"))
-        layout.addWidget(spin, 1)
-        self.grid.addWidget(container, 2, 0, 1, 4)
-
 class ViewportPanel(QFrame):
     hide_requested = Signal()
 
@@ -535,9 +531,10 @@ class MainWindow(QMainWindow):
         self.library_path = Path(library_path).resolve()
         self.library = PieceLibrary.load(self.library_path)
         self.scene = Scene(self.library.pieces)
-        self.front_viewport = EditorViewport(self.scene, self.palette, allow_3d=False)
+        self.document = EditorDocument(self.scene, self.palette[0].id)
+        self.front_viewport = EditorViewport(self.document, self.palette, allow_3d=False)
         self.front_viewport.set_view_mode(ViewMode.FRONT)
-        self.view3d = EditorViewport(self.scene, self.palette, read_only=True)
+        self.view3d = EditorViewport(self.document, self.palette)
         self.view3d.set_view_mode(ViewMode.PERSPECTIVE)
         self.viewport = self.front_viewport
         self._syncing_selection = False
@@ -568,7 +565,7 @@ class MainWindow(QMainWindow):
         self.left_splitter.setSizes([240, 130, 280])
 
         self.front_panel = ViewportPanel("Front Editor", self.front_viewport)
-        self.view3d_panel = ViewportPanel("3D Preview", self.view3d)
+        self.view3d_panel = ViewportPanel("3D Brush", self.view3d)
         self.front_panel.hide_requested.connect(lambda: self._set_view_panel_visible("front", False))
         self.view3d_panel.hide_requested.connect(lambda: self._set_view_panel_visible("3d", False))
         self.view_splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -599,6 +596,7 @@ class MainWindow(QMainWindow):
         self.toolbox_icon_paths = {
             "place": icon_dir / "tool_brush.png",
             "erase": icon_dir / "tool_eraser.png",
+            "paint": icon_dir / "tool_paint.png",
             "move": icon_dir / "tool_move.png",
             "duplicate": icon_dir / "tool_dup.png",
             "select": icon_dir / "tool_select.png",
@@ -636,11 +634,8 @@ class MainWindow(QMainWindow):
         self.toolbox_panel.add_button(
             "mirror", "Mirror", icons["mirror"], self.viewport.mirror_selection, 1, 2
         )
+        add_tool(EditorTool.PAINT, "paint", "Paint", 1, 3)
         self.tool_actions[EditorTool.PLACE].setChecked(True)
-        self.layer_spin = QSpinBox()
-        self.layer_spin.setRange(0, self.scene.bounds[2] - 1)
-        self.layer_spin.valueChanged.connect(self.viewport.set_layer)
-        self.toolbox_panel.add_layer_control(self.layer_spin)
 
     def _build_menu(self) -> None:
         file_menu = self.menuBar().addMenu("&File")
@@ -689,18 +684,21 @@ class MainWindow(QMainWindow):
         self.library_panel.piece_selected.connect(self._select_piece)
         self.palette_panel.color_selected.connect(self.viewport.recolor_selection)
         self.properties.apply_requested.connect(lambda data: self.viewport.update_selected(**data))
-        self.front_viewport.selection_changed.connect(lambda: self._selection_changed_from(self.front_viewport))
-        self.view3d.selection_changed.connect(lambda: self._selection_changed_from(self.view3d))
-        self.front_viewport.scene_changed.connect(lambda: self._scene_changed_from(self.front_viewport))
-        self.view3d.scene_changed.connect(lambda: self._scene_changed_from(self.view3d))
+        self.document.selection_changed.connect(self._selection_changed)
+        self.document.scene_changed.connect(self._scene_changed)
+        self.document.tool_changed.connect(self._sync_tool_buttons)
         self.front_viewport.status_message.connect(lambda text: self.statusBar().showMessage(text, 5000))
         self.view3d.status_message.connect(lambda text: self.statusBar().showMessage(text, 5000))
         self.ai_panel.generate_requested.connect(self._generate)
 
     def _set_tool(self, tool: EditorTool) -> None:
-        for candidate, action in self.tool_actions.items():
-            action.setChecked(candidate == tool)
+        self._sync_tool_buttons(tool)
         self.viewport.set_tool(tool)
+
+    def _sync_tool_buttons(self, tool: object) -> None:
+        selected_tool = tool if isinstance(tool, EditorTool) else self.document.tool
+        for candidate, action in self.tool_actions.items():
+            action.setChecked(candidate == selected_tool)
 
     def _select_piece(self, piece_id: str) -> None:
         self.viewport.active_piece_id = piece_id
@@ -708,28 +706,18 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(f"Active piece: {piece_id}", 3000)
 
     def _selection_changed_from(self, source: EditorViewport) -> None:
-        if self._syncing_selection:
-            return
-        self._syncing_selection = True
-        try:
-            target = self.view3d if source is self.front_viewport else self.front_viewport
-            target.selection = set(source.selection)
-            target.update()
-            self.properties.show_selection(source.selected_pieces())
-        finally:
-            self._syncing_selection = False
+        self.properties.show_selection(source.selected_pieces())
 
     def _selection_changed(self) -> None:
-        self._selection_changed_from(self.front_viewport)
+        self.properties.show_selection(self.front_viewport.selected_pieces())
 
     def _scene_changed_from(self, source: EditorViewport) -> None:
-        target = self.view3d if source is self.front_viewport else self.front_viewport
-        target.update()
         self.dirty = True
         self._update_title()
 
     def _scene_changed(self) -> None:
-        self._scene_changed_from(self.front_viewport)
+        self.dirty = True
+        self._update_title()
 
     def _center_views(self) -> None:
         self.front_viewport.center_view()
@@ -764,14 +752,17 @@ class MainWindow(QMainWindow):
             state = self.ui_settings.value(key)
             if state:
                 splitter.restoreState(state)
-        self._set_view_panel_visible(
-            "front", self.ui_settings.value("ui/front_panel_visible", True, type=bool)
-        )
-        self._set_view_panel_visible(
-            "3d", self.ui_settings.value("ui/3d_panel_visible", True, type=bool)
-        )
+        layout_version = self.ui_settings.value("ui/layout_version", 0, type=int)
+        if layout_version < UI_LAYOUT_VERSION:
+            front_visible, view3d_visible = False, True
+        else:
+            front_visible = self.ui_settings.value("ui/front_panel_visible", False, type=bool)
+            view3d_visible = self.ui_settings.value("ui/3d_panel_visible", True, type=bool)
+        self._set_view_panel_visible("front", front_visible)
+        self._set_view_panel_visible("3d", view3d_visible)
 
     def _save_ui_state(self) -> None:
+        self.ui_settings.setValue("ui/layout_version", UI_LAYOUT_VERSION)
         self.ui_settings.setValue("ui/main_window_geometry", self.saveGeometry())
         self.ui_settings.setValue("ui/main_splitter", self.main_splitter.saveState())
         self.ui_settings.setValue("ui/workspace_splitter", self.workspace_splitter.saveState())
@@ -800,10 +791,10 @@ class MainWindow(QMainWindow):
         self.front_viewport.set_palette(self.palette)
         self.view3d.set_palette(self.palette)
         self.scene = Scene(self.library.pieces)
-        self.front_viewport.set_scene(self.scene)
-        self.view3d.set_scene(self.scene)
+        self.document.reset_scene(self.scene)
+        if self.view3d.renderer3d:
+            self.view3d.renderer3d.reset_camera(self.scene)
         self.properties.set_scene_bounds(self.scene)
-        self.layer_spin.setRange(0, self.scene.bounds[2] - 1)
         self.project_path = None
         self.dirty = False
         self._update_title()
@@ -877,10 +868,10 @@ class MainWindow(QMainWindow):
         self.properties.set_palette(palette)
         self.front_viewport.set_palette(palette)
         self.view3d.set_palette(palette)
-        self.front_viewport.set_scene(scene)
-        self.view3d.set_scene(scene)
+        self.document.reset_scene(scene)
+        if self.view3d.renderer3d:
+            self.view3d.renderer3d.reset_camera(scene)
         self.properties.set_scene_bounds(scene)
-        self.layer_spin.setRange(0, scene.bounds[2] - 1)
         self.project_path = Path(path)
         self.dirty = False
         self._update_title()

@@ -197,6 +197,31 @@ void main() {
 """
 
 
+PREVIEW_VERTEX_SHADER = """
+#version 330
+uniform mat4 u_view_projection;
+in vec3 in_position;
+in vec4 in_model_0;
+in vec4 in_model_1;
+in vec4 in_model_2;
+in vec4 in_model_3;
+void main() {
+    mat4 model = mat4(in_model_0, in_model_1, in_model_2, in_model_3);
+    gl_Position = u_view_projection * model * vec4(in_position, 1.0);
+}
+"""
+
+
+PREVIEW_FRAGMENT_SHADER = """
+#version 330
+uniform vec4 u_preview_color;
+out vec4 fragment_color;
+void main() {
+    fragment_color = u_preview_color;
+}
+"""
+
+
 @dataclass(slots=True)
 class _GpuMesh:
     buffer: moderngl.Buffer
@@ -207,11 +232,15 @@ class _GpuMesh:
     pbr_vao: moderngl.VertexArray | None = None
     simple_vao: moderngl.VertexArray | None = None
     shadow_vao: moderngl.VertexArray | None = None
+    preview_buffer: moderngl.Buffer | None = None
+    preview_vao: moderngl.VertexArray | None = None
 
     def release(self) -> None:
-        for vao in (self.pbr_vao, self.simple_vao, self.shadow_vao):
+        for vao in (self.pbr_vao, self.simple_vao, self.shadow_vao, self.preview_vao):
             if vao:
                 vao.release()
+        if self.preview_buffer:
+            self.preview_buffer.release()
         if self.instance_buffer:
             self.instance_buffer.release()
         self.buffer.release()
@@ -227,6 +256,22 @@ class RenderStats:
 
 
 @dataclass(frozen=True, slots=True)
+class RayHit:
+    instance_id: str | None
+    cell: tuple[int, int, int]
+    normal: tuple[int, int, int]
+    world_position: tuple[float, float, float]
+    distance: float
+    ground: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class RenderPreview:
+    instance: PieceInstance
+    color: tuple[float, float, float, float]
+
+
+@dataclass(frozen=True, slots=True)
 class _RenderBatch:
     mesh: _GpuMesh
     instance_count: int
@@ -237,7 +282,7 @@ class Camera3D:
         self.yaw = 42.0
         self.pitch = 24.0
         self.distance = 44.0
-        self.target = np.array((0.0, 10.0, 2.0), dtype=np.float32)
+        self.target = np.array((0.0, 10.0, 0.0), dtype=np.float32)
 
     @property
     def position(self) -> np.ndarray:
@@ -256,12 +301,12 @@ class Camera3D:
     def reset(self, scene: Scene) -> None:
         self.yaw = 42.0
         self.pitch = 24.0
-        self.distance = max(scene.bounds[0], scene.bounds[1]) * 1.5
-        self.target = np.array((0.0, scene.bounds[1] * 0.34, scene.bounds[2] * 0.22), dtype=np.float32)
+        self.distance = max(scene.bounds[0], scene.bounds[1], scene.max_z - scene.min_z) * 1.5
+        self.target = np.array((0.0, scene.bounds[1] * 0.34, 0.0), dtype=np.float32)
 
     def orbit(self, dx: float, dy: float) -> None:
-        self.yaw = (self.yaw - dx * 0.45) % 360.0
-        self.pitch = max(-80.0, min(80.0, self.pitch + dy * 0.38))
+        self.yaw = (self.yaw - dx * 0.22) % 360.0
+        self.pitch = max(-80.0, min(80.0, self.pitch + dy * 0.18))
 
     def zoom(self, wheel_steps: float) -> None:
         self.distance = max(4.0, min(120.0, self.distance * math.pow(0.86, wheel_steps)))
@@ -286,6 +331,10 @@ class ModernGLSceneRenderer:
         self.line_program = self.context.program(
             vertex_shader=LINE_VERTEX_SHADER,
             fragment_shader=LINE_FRAGMENT_SHADER,
+        )
+        self.preview_program = self.context.program(
+            vertex_shader=PREVIEW_VERTEX_SHADER,
+            fragment_shader=PREVIEW_FRAGMENT_SHADER,
         )
         self.shadow_program = self.context.program(
             vertex_shader=SHADOW_VERTEX_SHADER,
@@ -334,6 +383,7 @@ class ModernGLSceneRenderer:
         selection: set[str],
         framebuffer_id: int,
         shading_mode: str = "pbr",
+        preview: RenderPreview | None = None,
     ) -> None:
         batches = self._prepare_batches(scene, palette, selection)
         light_view_projection = light_view_projection_matrix(scene)
@@ -368,14 +418,64 @@ class ModernGLSceneRenderer:
             assert vao is not None
             vao.render(moderngl.TRIANGLES, instances=batch.instance_count)
 
+        if preview is not None:
+            self._render_preview(scene, preview, view_projection)
+
         shadow_draws = len(batches) if shading_mode == "pbr" else 0
         self.stats = RenderStats(
             source_objects=len(scene.pieces),
             cached_objects=len(batches),
             triangles=sum(batch.mesh.triangle_count * batch.instance_count for batch in batches),
             cached_triangles=sum(batch.mesh.triangle_count for batch in batches),
-            draw_calls=1 + len(batches) + shadow_draws,
+            draw_calls=1 + len(batches) + shadow_draws + (1 if preview is not None else 0),
         )
+
+    def _render_preview(
+        self,
+        scene: Scene,
+        preview: RenderPreview,
+        view_projection: np.ndarray,
+    ) -> None:
+        definition = scene.piece_defs.get(preview.instance.piece_id)
+        if definition is None:
+            return
+        mesh = self._ensure_mesh(definition)
+        if mesh.preview_buffer is None:
+            mesh.preview_buffer = self.context.buffer(reserve=16 * 4, dynamic=True)
+            mesh.preview_vao = self.context.vertex_array(
+                self.preview_program,
+                [
+                    (mesh.buffer, "3f 12x", "in_position"),
+                    (
+                        mesh.preview_buffer,
+                        "4f 4f 4f 4f /i",
+                        "in_model_0",
+                        "in_model_1",
+                        "in_model_2",
+                        "in_model_3",
+                    ),
+                ],
+            )
+        mesh.preview_buffer.write(model_matrix(preview.instance, definition).T.astype(np.float32).tobytes())
+        self.preview_program["u_view_projection"].write(_gl_matrix(view_projection))
+        self.preview_program["u_preview_color"].value = preview.color
+        assert mesh.preview_vao is not None
+        try:
+            # Transparent ghosts render front faces only. This preserves the
+            # translucent shell without blending rear/interior polygons
+            # through the visible surface.
+            self.context.cull_face = "back"
+            self.context.enable(moderngl.CULL_FACE)
+            self.context.enable(moderngl.BLEND)
+            self.context.blend_func = (moderngl.SRC_ALPHA, moderngl.ONE_MINUS_SRC_ALPHA)
+            self.context.depth_mask = False
+            self.context.depth_func = "<="
+            mesh.preview_vao.render(moderngl.TRIANGLES, instances=1)
+        finally:
+            self.context.depth_func = "<"
+            self.context.depth_mask = True
+            self.context.disable(moderngl.BLEND)
+            self.context.disable(moderngl.CULL_FACE)
 
     def _render_shadow_map(
         self,
@@ -471,7 +571,7 @@ class ModernGLSceneRenderer:
         view = look_at_matrix(self.camera.position, self.camera.target, np.array((0.0, 1.0, 0.0), dtype=np.float32))
         return projection @ view
 
-    def pick(self, x: float, y: float, scene: Scene) -> str | None:
+    def screen_ray(self, x: float, y: float) -> tuple[np.ndarray, np.ndarray]:
         width, height = self.viewport_size
         ndc_x = 2.0 * x / max(1, width) - 1.0
         ndc_y = 1.0 - 2.0 * y / max(1, height)
@@ -480,19 +580,34 @@ class ModernGLSceneRenderer:
         far = inverse @ np.array((ndc_x, ndc_y, 1.0, 1.0), dtype=np.float32)
         near = near[:3] / near[3]
         far = far[:3] / far[3]
-        direction = _normalize(far - near)
-        closest: tuple[float, str] | None = None
-        for piece in scene.pieces:
-            definition = scene.piece_defs.get(piece.piece_id)
-            if not definition:
-                continue
-            size = definition.rotated_size(piece.rotation)
-            minimum = np.asarray(piece.position, dtype=np.float32)
-            maximum = minimum + np.asarray(size, dtype=np.float32)
-            distance = _ray_box_distance(near, direction, minimum, maximum)
-            if distance is not None and (closest is None or distance < closest[0]):
-                closest = (distance, piece.instance_id)
-        return closest[1] if closest else None
+        return near, _normalize(far - near)
+
+    def raycast_grid(self, x: float, y: float, scene: Scene, include_ground: bool = True) -> RayHit | None:
+        origin, direction = self.screen_ray(x, y)
+        hit = _grid_raycast(origin, direction, scene)
+        if hit is not None:
+            return hit
+        if not include_ground or abs(float(direction[1])) < 1e-8:
+            return None
+        distance = -float(origin[1]) / float(direction[1])
+        if distance < 0.0:
+            return None
+        point = origin + direction * distance
+        x_cell, z_cell = math.floor(float(point[0])), math.floor(float(point[2]))
+        if not (scene.min_x <= x_cell < scene.max_x and scene.min_z <= z_cell < scene.max_z):
+            return None
+        return RayHit(
+            None,
+            (x_cell, 0, z_cell),
+            (0, 1, 0),
+            tuple(float(value) for value in point),
+            distance,
+            True,
+        )
+
+    def pick(self, x: float, y: float, scene: Scene) -> str | None:
+        hit = self.raycast_grid(x, y, scene, include_ground=False)
+        return hit.instance_id if hit else None
 
     def _ensure_mesh(self, definition: PieceDef) -> _GpuMesh:
         path = definition.mesh_path
@@ -594,34 +709,19 @@ def build_grid_lines(scene: Scene) -> np.ndarray:
         lines.append((*a, *color))
         lines.append((*b, *color))
 
-    z = -0.025
-    minor = (0.15, 0.17, 0.20)
-    for x in range(scene.min_x, scene.max_x + 1):
-        if x % 5 == 0:
-            add((x, 0, z), (x, scene.bounds[1], z), minor)
-    for y in range(scene.bounds[1] + 1):
-        if y % 5 == 0:
-            add((scene.min_x, y, z), (scene.max_x, y, z), minor)
-    for size, color in ((10, (0.36, 0.42, 0.5)), (20, (0.43, 0.5, 0.6)), (30, (0.57, 0.65, 0.76))):
-        if size > scene.bounds[0] or size > scene.bounds[1]:
-            continue
-        left, right, top = -size / 2, size / 2, float(size)
-        add((left, 0, z), (right, 0, z), color)
-        add((right, 0, z), (right, top, z), color)
-        add((right, top, z), (left, top, z), color)
-        add((left, top, z), (left, 0, z), color)
-
-    # World axes and a shallow floor grid make depth immediately readable.
+    # Keep only the horizontal construction floor; the old upright X/Y grid
+    # obscured pieces while editing from oblique camera angles.
     add((scene.min_x, 0, 0), (scene.max_x, 0, 0), (0.78, 0.26, 0.28))
     add((0, 0, 0), (0, scene.bounds[1], 0), (0.28, 0.78, 0.4))
-    add((0, 0, 0), (0, 0, scene.bounds[2]), (0.28, 0.48, 0.92))
-    floor = (0.14, 0.16, 0.19)
-    for depth in range(scene.bounds[2] + 1):
-        if depth % 5 == 0 or depth == scene.bounds[2]:
-            add((scene.min_x, 0, depth), (scene.max_x, 0, depth), floor)
+    add((0, 0, scene.min_z), (0, 0, scene.max_z), (0.28, 0.48, 0.92))
+    floor_minor = (0.105, 0.12, 0.145)
+    floor_major = (0.19, 0.22, 0.27)
+    for depth in range(scene.min_z, scene.max_z + 1):
+        color = floor_major if depth % 5 == 0 or depth in {scene.min_z, scene.max_z} else floor_minor
+        add((scene.min_x, 0, depth), (scene.max_x, 0, depth), color)
     for x in range(scene.min_x, scene.max_x + 1):
-        if x % 5 == 0:
-            add((x, 0, 0), (x, 0, scene.bounds[2]), floor)
+        color = floor_major if x % 5 == 0 or x in {scene.min_x, scene.max_x} else floor_minor
+        add((x, 0, scene.min_z), (x, 0, scene.max_z), color)
     return np.asarray(lines, dtype=np.float32)
 
 
@@ -655,9 +755,10 @@ def orthographic_matrix(
 
 
 def light_view_projection_matrix(scene: Scene) -> np.ndarray:
-    center = np.array((0.0, scene.bounds[1] * 0.5, scene.bounds[2] * 0.5), dtype=np.float32)
+    center = np.array((0.0, scene.bounds[1] * 0.5, 0.0), dtype=np.float32)
     direction = _normalize(np.array((-0.45, 0.8, 0.65), dtype=np.float32))
-    radius = math.sqrt(sum(float(value * value) for value in scene.bounds)) * 0.58 + 3.0
+    extents = (scene.bounds[0], scene.bounds[1], scene.max_z - scene.min_z)
+    radius = math.sqrt(sum(float(value * value) for value in extents)) * 0.58 + 3.0
     eye = center + direction * radius * 2.0
     view = look_at_matrix(eye, center, np.array((0.0, 1.0, 0.0), dtype=np.float32))
     projection = orthographic_matrix(-radius, radius, -radius, radius, 0.1, radius * 4.0)
@@ -687,6 +788,105 @@ def _ray_box_distance(origin, direction, minimum, maximum) -> float | None:
     if far < max(near, 0.0):
         return None
     return max(near, 0.0)
+
+
+def _ray_box_interval(
+    origin: np.ndarray,
+    direction: np.ndarray,
+    minimum: np.ndarray,
+    maximum: np.ndarray,
+) -> tuple[float, float, tuple[int, int, int]] | None:
+    near_distance = -math.inf
+    far_distance = math.inf
+    enter_normal = [0, 0, 0]
+    for axis in range(3):
+        component = float(direction[axis])
+        start = float(origin[axis])
+        low, high = float(minimum[axis]), float(maximum[axis])
+        if abs(component) < 1e-8:
+            if start < low or start > high:
+                return None
+            continue
+        first = (low - start) / component
+        second = (high - start) / component
+        axis_near, axis_far = (first, second) if first <= second else (second, first)
+        if axis_near > near_distance:
+            near_distance = axis_near
+            enter_normal = [0, 0, 0]
+            enter_normal[axis] = -1 if component > 0 else 1
+        far_distance = min(far_distance, axis_far)
+        if near_distance > far_distance:
+            return None
+    if far_distance < max(near_distance, 0.0):
+        return None
+    return near_distance, far_distance, tuple(enter_normal)  # type: ignore[return-value]
+
+
+def _grid_raycast(origin: np.ndarray, direction: np.ndarray, scene: Scene) -> RayHit | None:
+    minimum = np.asarray((scene.min_x, 0, scene.min_z), dtype=np.float32)
+    maximum = np.asarray((scene.max_x, scene.bounds[1], scene.max_z), dtype=np.float32)
+    interval = _ray_box_interval(origin, direction, minimum, maximum)
+    if interval is None:
+        return None
+    enter_distance, exit_distance, enter_normal = interval
+    distance = max(0.0, enter_distance)
+    point = origin + direction * (distance + 1e-5)
+    point = np.minimum(np.maximum(point, minimum + 1e-6), maximum - 1e-6)
+    cell = [math.floor(float(value)) for value in point]
+    step = [1 if value > 1e-8 else -1 if value < -1e-8 else 0 for value in direction]
+    next_crossing: list[float] = []
+    crossing_delta: list[float] = []
+    for axis in range(3):
+        if step[axis] == 0:
+            next_crossing.append(math.inf)
+            crossing_delta.append(math.inf)
+            continue
+        boundary = cell[axis] + (1 if step[axis] > 0 else 0)
+        next_crossing.append((boundary - float(origin[axis])) / float(direction[axis]))
+        crossing_delta.append(abs(1.0 / float(direction[axis])))
+
+    normal = enter_normal if enter_distance >= 0 else (0, 0, 0)
+    while distance <= exit_distance + 1e-6:
+        grid_cell = (cell[0], cell[1], cell[2])
+        instance_id = scene.instance_id_at(grid_cell)
+        if instance_id is not None:
+            hit_distance = max(0.0, distance)
+            hit_normal = normal
+            if hit_normal == (0, 0, 0):
+                cell_interval = _ray_box_interval(
+                    origin,
+                    direction,
+                    np.asarray(grid_cell, dtype=np.float32),
+                    np.asarray(grid_cell, dtype=np.float32) + 1.0,
+                )
+                if cell_interval is not None:
+                    hit_distance = max(0.0, cell_interval[0])
+                    hit_normal = cell_interval[2]
+            hit_point = origin + direction * hit_distance
+            return RayHit(
+                instance_id,
+                grid_cell,
+                hit_normal,
+                tuple(float(value) for value in hit_point),
+                hit_distance,
+                False,
+            )
+        axis = min(range(3), key=next_crossing.__getitem__)
+        distance = next_crossing[axis]
+        if not math.isfinite(distance):
+            break
+        cell[axis] += step[axis]
+        normal_values = [0, 0, 0]
+        normal_values[axis] = -step[axis]
+        normal = tuple(normal_values)  # type: ignore[assignment]
+        next_crossing[axis] += crossing_delta[axis]
+        if not (
+            scene.min_x <= cell[0] < scene.max_x
+            and 0 <= cell[1] < scene.bounds[1]
+            and scene.min_z <= cell[2] < scene.max_z
+        ):
+            break
+    return None
 
 
 def _normalize(vector: np.ndarray) -> np.ndarray:

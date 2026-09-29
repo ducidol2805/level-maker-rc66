@@ -18,6 +18,7 @@ def test_default_canvas_is_fixed_to_thirty_by_thirty() -> None:
 
     assert scene.bounds == EDITOR_BOUNDS == (30, 30, 16)
     assert (scene.min_x, scene.max_x) == (-15, 15)
+    assert (scene.min_z, scene.max_z) == (-16, 16)
 
 
 def test_rotated_footprint_and_overlap() -> None:
@@ -40,6 +41,21 @@ def test_negative_x_is_valid_inside_centered_bounds() -> None:
     assert scene.piece_at((-4, 0, 0)) is piece
     with pytest.raises(PlacementError, match="outside scene bounds"):
         scene.add(PieceInstance("cube", (-5, 0, 0), 0, 0))
+
+
+def test_negative_z_is_valid_without_breaking_existing_positive_depth() -> None:
+    scene = Scene(definitions(), bounds=(8, 8, 3))
+    negative = PieceInstance("cube", (0, 0, -3), 0, 0)
+    positive = PieceInstance("cube", (0, 0, 2), 0, 0)
+
+    scene.add_many((negative, positive))
+
+    assert scene.piece_at((0, 0, -3)) is negative
+    assert scene.piece_at((0, 0, 2)) is positive
+    with pytest.raises(PlacementError, match="outside scene bounds"):
+        scene.add(PieceInstance("cube", (0, 0, -4), 0, 0))
+    with pytest.raises(PlacementError, match="outside scene bounds"):
+        scene.add(PieceInstance("cube", (0, 0, 3), 0, 0))
 
 
 def test_replace_is_atomic_when_move_is_invalid() -> None:

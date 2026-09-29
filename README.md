@@ -21,13 +21,14 @@ cuboid generated from the piece's declared grid size.
 Editing commands now live in a responsive Toolbox above the Palette. Buttons
 fit the available panel width and height, with a centered icon and label below.
 The first row is Brush, Eraser, Move, and Duplicate; the second row is Select,
-Box Select, and Mirror. Toolbox artwork is loaded from `tool_icon/`; Mirror uses
-the horizontal flip asset.
+Box Select, Mirror, and Paint. Toolbox artwork is loaded from `tool_icon/`;
+Mirror uses the horizontal flip asset.
 
-The Front Editor and 3D Preview are independent, resizable center panels backed
-by the same scene and synchronized selection. Toggle either panel from the View
-menu; the 3D panel is preview-only, so editing history stays in the Front
-Editor.
+The Front Editor and 3D Brush are independent, resizable center panels backed
+by one shared editor document: scene, selection, active tool, active piece,
+active color, and undo history stay synchronized. A fresh or migrated layout
+opens 3D across the center; toggle Front back on from the View menu. Later panel
+visibility changes are restored normally.
 
 Window geometry, maximize state, all splitter sizes, and Front/3D panel
 visibility are saved automatically on exit and restored on the next launch.
@@ -36,10 +37,10 @@ area absorbs window-width changes. Toolbox and Palette heights likewise stay
 fixed while Piece Library absorbs height changes. Splitter handles remain
 manually adjustable, and the new pixel sizes are saved on exit.
 
-## Controls
+## Front controls
 
 - Brush tool: left-click or drag to paint pieces continuously
-- Eraser tool: left-click or drag to erase; right-drag still erases from any tool
+- Eraser tool: left-click or drag to erase
 - Right-click or drag: erase the piece under each grid cell
 - Shift + click: add/remove a piece from selection
 - Q / E: rotate selection
@@ -50,9 +51,38 @@ manually adjustable, and the new pixel sizes are saved on exit.
 - H: center the Front origin near the bottom and reset the 3D camera
 - Mouse wheel: zoom
 
-In Perspective mode, drag with the left mouse button to orbit, middle-drag to
-pan, use the wheel to zoom, click a piece to select it, and press H to reset the
-3D camera. Rendering includes depth testing, directional lighting, selection
+## 3D Brush controls
+
+- Left-click or drag: apply the active Attach, Erase, or Paint tool
+- Right-drag: orbit
+- Middle-drag: pan
+- Mouse wheel: zoom
+- T / R / G: Attach (Brush) / Erase / Paint
+- Hold Shift with Attach or Erase: temporarily use the opposite operation
+- Select: click to replace selection; Shift-click to toggle a piece
+- H: reset the 3D camera
+
+Orbit sensitivity is intentionally reduced for more precise camera control.
+The 3D guide now uses a 1×1 horizontal floor grid, stronger 5-cell guide lines,
+and world axes; the old upright grid and the Toolbox `Layer Z` control have been removed. Depth is editable on
+both sides of the origin (`Z = -16` through `15` by default), while existing
+projects using non-negative Z coordinates remain valid.
+
+Attach places the selected Piece Library item against the pointed face. On an
+empty scene or a missed object it uses the Y=0 construction floor. A drag locks
+the first hit plane and fills intermediate cells so fast strokes do not leave
+holes. Erase removes the whole piece under the brush, while Paint changes that
+piece's `color_id`. A complete stroke is one undo step. The preview pass shows
+valid placement in the active color, invalid placement in red, and whole-piece
+Erase/Paint targets without modifying scene or instance-cache data. Ghost
+geometry remains translucent but renders front faces only, preventing rear or
+interior polygons from bleeding through the visible shell.
+
+Move and Box Select remain Front-only in this milestone. If ModernGL cannot
+initialize, 3D editing is disabled and the viewport reports the renderer error;
+it never applies an edit through the fallback painter.
+
+3D rendering includes depth testing, directional lighting, selection
 highlighting, world axes, and uncluttered 5-cell major grids on the construction
 plane and depth floor. Front mode retains the full 1-cell editing grid.
 

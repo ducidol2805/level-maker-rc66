@@ -8,6 +8,7 @@ from piece_editor.domain import PieceDef, PieceInstance
 from piece_editor.library import PieceLibrary
 from piece_editor.mesh import load_piece_mesh
 from piece_editor.renderer3d import (
+    Camera3D,
     ModernGLSceneRenderer,
     build_grid_lines,
     light_view_projection_matrix,
@@ -62,6 +63,40 @@ def test_3d_grid_contains_finite_colored_line_vertices() -> None:
     assert vertices.ndim == 2 and vertices.shape[1] == 6
     assert vertices.shape[0] % 2 == 0
     assert np.all(np.isfinite(vertices))
+    assert vertices[:, 2].min() == scene.min_z
+    assert vertices[:, 2].max() == scene.max_z
+    segments = vertices.reshape(-1, 2, 6)
+    depth_lines = {
+        int(start[2])
+        for start, end in segments
+        if start[1] == end[1] == 0
+        and start[0] == scene.min_x
+        and end[0] == scene.max_x
+        and start[2] == end[2]
+    }
+    x_lines = {
+        int(start[0])
+        for start, end in segments
+        if start[1] == end[1] == 0
+        and start[2] == scene.min_z
+        and end[2] == scene.max_z
+        and start[0] == end[0]
+    }
+    assert depth_lines == set(range(scene.min_z, scene.max_z + 1))
+    assert x_lines == set(range(scene.min_x, scene.max_x + 1))
+    for start, end in segments:
+        if start[1] != 0 or end[1] != 0:
+            assert np.allclose(start[:3], (0, 0, 0))
+            assert np.allclose(end[:3], (0, scene.bounds[1], 0))
+
+
+def test_orbit_uses_reduced_sensitivity() -> None:
+    camera = Camera3D()
+
+    camera.orbit(10, 10)
+
+    assert np.isclose(camera.yaw, 39.8)
+    assert np.isclose(camera.pitch, 25.8)
 
 
 def test_directional_shadow_matrix_is_finite_and_invertible() -> None:

@@ -19,12 +19,14 @@ class Scene:
     bounds: Vec3i = EDITOR_BOUNDS
     pieces: list[PieceInstance] = field(default_factory=list)
     _occupied: dict[Vec3i, str] = field(default_factory=dict, init=False, repr=False)
+    _by_id: dict[str, PieceInstance] = field(default_factory=dict, init=False, repr=False)
 
     def __post_init__(self) -> None:
         if len(self.bounds) != 3 or any(value <= 0 for value in self.bounds):
             raise PlacementError(f"Scene bounds must contain three positive sizes: {self.bounds}")
         initial = list(self.pieces)
         self.pieces.clear()
+        self._by_id.clear()
         for piece in initial:
             self.add(piece)
 
@@ -54,24 +56,39 @@ class Scene:
         """Exclusive upper X bound."""
         return self.min_x + self.bounds[0]
 
+    @property
+    def min_z(self) -> int:
+        """Inclusive negative depth bound; positive project depths stay compatible."""
+        return -self.bounds[2]
+
+    @property
+    def max_z(self) -> int:
+        """Exclusive positive depth bound."""
+        return self.bounds[2]
+
     def validate(self, instance: PieceInstance, ignore_ids: Iterable[str] = ()) -> None:
         definition = self.require_definition(instance.piece_id)
         if instance.rotation not in definition.allowed_rotations:
             raise PlacementError(f"Rotation {instance.rotation} is not allowed for {instance.piece_id}")
         ignored = set(ignore_ids)
-        _, by, bz = self.bounds
+        _, by, _ = self.bounds
         for cell in self.cells_for(instance):
-            if not (self.min_x <= cell[0] < self.max_x and 0 <= cell[1] < by and 0 <= cell[2] < bz):
+            if not (
+                self.min_x <= cell[0] < self.max_x
+                and 0 <= cell[1] < by
+                and self.min_z <= cell[2] < self.max_z
+            ):
                 raise PlacementError(f"Piece is outside scene bounds at {cell}")
             occupant = self._occupied.get(cell)
             if occupant is not None and occupant not in ignored:
                 raise PlacementError(f"Cell {cell} is already occupied")
 
     def add(self, instance: PieceInstance) -> None:
-        if any(p.instance_id == instance.instance_id for p in self.pieces):
+        if instance.instance_id in self._by_id:
             raise PlacementError(f"Duplicate instance id: {instance.instance_id}")
         self.validate(instance)
         self.pieces.append(instance)
+        self._by_id[instance.instance_id] = instance
         for cell in self.cells_for(instance):
             self._occupied[cell] = instance.instance_id
 
@@ -89,30 +106,36 @@ class Scene:
         ids = set(instance_ids)
         removed = [piece for piece in self.pieces if piece.instance_id in ids]
         self.pieces[:] = [piece for piece in self.pieces if piece.instance_id not in ids]
+        for instance_id in ids:
+            self._by_id.pop(instance_id, None)
         self.rebuild_occupancy()
         return removed
 
     def clear(self) -> None:
         self.pieces.clear()
         self._occupied.clear()
+        self._by_id.clear()
 
     def replace_many(self, replacements: dict[str, PieceInstance]) -> None:
         original = list(self.pieces)
         candidate = [replacements.get(piece.instance_id, piece) for piece in self.pieces]
         self.pieces.clear()
         self._occupied.clear()
+        self._by_id.clear()
         try:
             for piece in candidate:
                 self.add(piece)
         except PlacementError:
             self.pieces.clear()
             self._occupied.clear()
+            self._by_id.clear()
             for piece in original:
                 self.add(piece)
             raise
 
     def rebuild_occupancy(self) -> None:
         self._occupied.clear()
+        self._by_id = {piece.instance_id: piece for piece in self.pieces}
         for piece in self.pieces:
             for cell in self.cells_for(piece):
                 if cell in self._occupied:
@@ -121,12 +144,13 @@ class Scene:
 
     def piece_at(self, cell: Vec3i) -> PieceInstance | None:
         instance_id = self._occupied.get(cell)
-        if not instance_id:
-            return None
-        return next((p for p in self.pieces if p.instance_id == instance_id), None)
+        return self._by_id.get(instance_id) if instance_id else None
+
+    def instance_id_at(self, cell: Vec3i) -> str | None:
+        return self._occupied.get(cell)
 
     def piece_by_id(self, instance_id: str) -> PieceInstance | None:
-        return next((p for p in self.pieces if p.instance_id == instance_id), None)
+        return self._by_id.get(instance_id)
 
     def snapshot(self) -> list[dict[str, object]]:
         return [piece.to_dict() for piece in self.pieces]
@@ -136,12 +160,14 @@ class Scene:
         old = list(self.pieces)
         self.pieces.clear()
         self._occupied.clear()
+        self._by_id.clear()
         try:
             for piece in restored:
                 self.add(piece)
         except PlacementError:
             self.pieces.clear()
             self._occupied.clear()
+            self._by_id.clear()
             for piece in old:
                 self.add(piece)
             raise
