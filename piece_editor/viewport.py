@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .brush3d import BrushStroke3D, cell_on_stroke_plane, grid_line_on_plane, piece_position_for_target, stroke_from_hit
+from .brush3d import BrushStroke3D, cell_on_stroke_plane, grid_line_on_plane, mirrored_piece_yz, piece_position_for_target, stroke_from_hit
 from .domain import PaletteColor, PieceInstance
 from .document import EditorDocument, EditorTool
 from .renderer3d import ModernGLSceneRenderer, RayHit, RenderPreview, RenderStats
@@ -31,6 +31,8 @@ _UNCHANGED = object()
 class RendererPanel(QFrame):
     shader_changed = Signal(str)
     projection_changed = Signal(str)
+    symmetry_changed = Signal(bool)
+    grid_plane_changed = Signal(bool)
 
     def __init__(self, parent: QWidget) -> None:
         super().__init__(parent)
@@ -106,6 +108,16 @@ class RendererPanel(QFrame):
             self.controls_grid.addWidget(button, 3, index * 2, 1, 2)
         self.projection_buttons["perspective"].setChecked(True)
         layout.addLayout(self.controls_grid)
+        self.symmetry_button = QPushButton("Symmetry Draw · YZ")
+        self.symmetry_button.setCheckable(True)
+        self.symmetry_button.setToolTip("Draw symmetrically across the YZ plane (X = 0)")
+        self.symmetry_button.toggled.connect(self.symmetry_changed.emit)
+        layout.addWidget(self.symmetry_button)
+        self.grid_plane_button = QPushButton("Grid Plane · YZ · 20%")
+        self.grid_plane_button.setCheckable(True)
+        self.grid_plane_button.setToolTip("Show the YZ grid plane at X = 0 with 20% opacity")
+        self.grid_plane_button.toggled.connect(self.grid_plane_changed.emit)
+        layout.addWidget(self.grid_plane_button)
         self.setFixedWidth(210)
         self.adjustSize()
 
@@ -175,6 +187,8 @@ class EditorViewport(QOpenGLWidget):
         self.camera_drag_button: Qt.MouseButton | None = None
         self.camera_drag_moved = False
         self.brush_stroke3d: BrushStroke3D | None = None
+        self.symmetry_draw = False
+        self.show_grid_plane = False
         self.hover_hit3d: RayHit | None = None
         self.render_preview3d: RenderPreview | None = None
         self.renderer3d: ModernGLSceneRenderer | None = None
@@ -183,12 +197,16 @@ class EditorViewport(QOpenGLWidget):
         self.renderer_panel = RendererPanel(self)
         self.renderer_panel.shader_changed.connect(self.set_shading_mode)
         self.renderer_panel.projection_changed.connect(self.set_projection_mode)
+        self.renderer_panel.symmetry_changed.connect(self.set_symmetry_draw)
+        self.renderer_panel.grid_plane_changed.connect(self.set_grid_plane_visible)
+        self.renderer_panel.symmetry_button.setEnabled(not read_only)
         self.renderer_panel.hide()
         self.document.scene_changed.connect(self._document_scene_changed)
         self.document.selection_changed.connect(self._document_selection_changed)
         self.document.tool_changed.connect(self._document_tool_changed)
         self.document.active_piece_changed.connect(self._document_brush_changed)
         self.document.active_rotation_changed.connect(self._document_rotation_changed)
+        self.document.active_rotation_x_changed.connect(self._document_rotation_changed)
         self.document.active_color_changed.connect(self._document_brush_changed)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.setMouseTracking(True)
@@ -227,6 +245,10 @@ class EditorViewport(QOpenGLWidget):
         return self.document.active_rotation
 
     @property
+    def active_rotation_x(self) -> int:
+        return self.document.active_rotation_x
+
+    @property
     def selection(self) -> set[str]:
         return self.document.selection
 
@@ -263,6 +285,18 @@ class EditorViewport(QOpenGLWidget):
     def _document_rotation_changed(self, _value: object) -> None:
         if self.hover_hit3d is not None and self.tool == EditorTool.PLACE:
             self.render_preview3d = self._preview_for_hit(self.hover_hit3d, EditorTool.PLACE)
+        self.update()
+
+    def set_symmetry_draw(self, enabled: bool) -> None:
+        self.symmetry_draw = bool(enabled) and not self.read_only
+        self.renderer_panel.symmetry_button.setChecked(self.symmetry_draw)
+        if self.hover_hit3d is not None:
+            self.render_preview3d = self._preview_for_hit(self.hover_hit3d, self.tool)
+        self.update()
+
+    def set_grid_plane_visible(self, visible: bool) -> None:
+        self.show_grid_plane = bool(visible)
+        self.renderer_panel.grid_plane_button.setChecked(self.show_grid_plane)
         self.update()
 
     def resizeEvent(self, event) -> None:  # noqa: N802
@@ -375,20 +409,25 @@ class EditorViewport(QOpenGLWidget):
             return
         self.document.remove_ids(self.selection)
 
-    def rotate_selection(self, delta: int) -> None:
+    def rotate_selection(self, delta: int, axis: str = "y") -> None:
         pieces = self.selected_pieces()
         if not pieces:
             return
         replacements: dict[str, PieceInstance] = {}
         for piece in pieces:
             definition = self.scene.require_definition(piece.piece_id)
-            desired = (piece.rotation + delta) % 360
+            current = piece.rotation_x if axis == "x" else piece.rotation
+            desired = (current + delta) % 360
             if desired not in definition.allowed_rotations:
                 allowed = definition.allowed_rotations
                 direction = 1 if delta > 0 else -1
-                index = allowed.index(piece.rotation) if piece.rotation in allowed else 0
+                index = allowed.index(current) if current in allowed else 0
                 desired = allowed[(index + direction) % len(allowed)]
-            replacements[piece.instance_id] = replace(piece, rotation=desired)
+            replacements[piece.instance_id] = replace(
+                piece,
+                rotation_x=desired if axis == "x" else piece.rotation_x,
+                rotation=desired if axis == "y" else piece.rotation,
+            )
         self._apply_replacements(replacements)
 
     def move_selection(self, offset: tuple[int, int, int]) -> None:
@@ -409,12 +448,17 @@ class EditorViewport(QOpenGLWidget):
         }
         self._apply_replacements(replacements)
 
-    def rotate_current(self, delta: int) -> None:
+    def rotate_current(self, delta: int, axis: str = "y") -> None:
         if self.tool == EditorTool.PLACE and self.active_piece_id in self.scene.piece_defs:
-            self.document.rotate_active_piece(delta)
-            self.status_message.emit(f"Ghost rotation: {self.active_rotation}° around Y")
+            if axis == "x":
+                self.document.rotate_active_piece_x(delta)
+                value = self.active_rotation_x
+            else:
+                self.document.rotate_active_piece(delta)
+                value = self.active_rotation
+            self.status_message.emit(f"Ghost rotation: {value}° around {axis.upper()}")
             return
-        self.rotate_selection(delta)
+        self.rotate_selection(delta, axis)
 
     def recolor_selection(self, color_id: int) -> None:
         self.active_color_id = color_id
@@ -436,6 +480,7 @@ class EditorViewport(QOpenGLWidget):
                 piece.rotation,
                 piece.color_id,
                 piece.group_id,
+                rotation_x=piece.rotation_x,
             )
             for piece in pieces
         ]
@@ -456,23 +501,24 @@ class EditorViewport(QOpenGLWidget):
         if not pieces:
             return
         left = min(
-            piece.position[0] + self.scene.require_definition(piece.piece_id).rotated_bounds(piece.rotation)[0][0]
+            piece.position[0]
+            + self.scene.require_definition(piece.piece_id).rotated_bounds_3d(piece.rotation, piece.rotation_x)[0][0]
             for piece in pieces
         )
         right = max(
             piece.position[0]
-            + self.scene.require_definition(piece.piece_id).rotated_bounds(piece.rotation)[0][0]
-            + self.scene.require_definition(piece.piece_id).rotated_bounds(piece.rotation)[1][0]
+            + self.scene.require_definition(piece.piece_id).rotated_bounds_3d(piece.rotation, piece.rotation_x)[0][0]
+            + self.scene.require_definition(piece.piece_id).rotated_bounds_3d(piece.rotation, piece.rotation_x)[1][0]
             for piece in pieces
         )
         replacements: dict[str, PieceInstance] = {}
         for piece in pieces:
             definition = self.scene.require_definition(piece.piece_id)
-            old_offset, old_size = definition.rotated_bounds(piece.rotation)
+            old_offset, old_size = definition.rotated_bounds_3d(piece.rotation, piece.rotation_x)
             rotation = (-piece.rotation) % 360
             if rotation not in definition.allowed_rotations:
                 rotation = piece.rotation
-            new_offset, _ = definition.rotated_bounds(rotation)
+            new_offset, _ = definition.rotated_bounds_3d(rotation, piece.rotation_x)
             mirrored_left = left + right - (piece.position[0] + old_offset[0] + old_size[0])
             replacements[piece.instance_id] = replace(
                 piece,
@@ -486,6 +532,7 @@ class EditorViewport(QOpenGLWidget):
         *,
         position: tuple[int, int, int] | None = None,
         rotation: int | None = None,
+        rotation_x: int | None = None,
         color_id: int | None = None,
         group_id: str | None | object = _UNCHANGED,
     ) -> None:
@@ -501,6 +548,7 @@ class EditorViewport(QOpenGLWidget):
                 piece,
                 position=position if position is not None else piece.position,
                 rotation=rotation if rotation is not None else piece.rotation,
+                rotation_x=rotation_x if rotation_x is not None else piece.rotation_x,
                 color_id=color_id if color_id is not None else piece.color_id,
                 group_id=piece.group_id if group_id is _UNCHANGED else group_id,  # type: ignore[arg-type]
             )
@@ -545,6 +593,7 @@ class EditorViewport(QOpenGLWidget):
                     self.defaultFramebufferObject(),
                     self.shading_mode,
                     self.render_preview3d,
+                    show_grid_plane=self.show_grid_plane,
                 )
                 self.renderer3d.context.finish()
                 painter.endNativePainting()
@@ -580,7 +629,7 @@ class EditorViewport(QOpenGLWidget):
         pieces = sorted(self.scene.pieces, key=lambda p: (p.position[2], p.position[1], p.position[0]))
         for piece in pieces:
             definition = self.scene.require_definition(piece.piece_id)
-            offset, (sx, sy, sz) = definition.rotated_bounds(piece.rotation)
+            offset, (sx, sy, sz) = definition.rotated_bounds_3d(piece.rotation, piece.rotation_x)
             x = piece.position[0] + offset[0]
             y = piece.position[1] + offset[1]
             z = piece.position[2] + offset[2]
@@ -601,7 +650,9 @@ class EditorViewport(QOpenGLWidget):
         if self.tool == EditorTool.PLACE and self.hover_cell and self.active_piece_id:
             definition = self.scene.piece_defs.get(self.active_piece_id)
             if definition:
-                offset, (sx, sy, _) = definition.rotated_bounds(self.active_rotation)
+                offset, (sx, sy, _) = definition.rotated_bounds_3d(
+                    self.active_rotation, self.active_rotation_x
+                )
                 rect = self._grid_rect(self.hover_cell[0] + offset[0], self.hover_cell[1] + offset[1], sx, sy)
                 ghost = self._color(self.active_color_id)
                 ghost.setAlpha(110)
@@ -640,7 +691,8 @@ class EditorViewport(QOpenGLWidget):
         guides = (
             (10, QColor("#566171"), 1.5),
             (20, QColor("#68778a"), 2.0),
-            (30, QColor("#8292a8"), 2.5),
+            (30, QColor("#76869a"), 2.0),
+            (50, QColor("#8292a8"), 2.5),
         )
         for size, color, width in guides:
             if size > self.scene.bounds[0] or size > self.scene.bounds[1]:
@@ -656,7 +708,7 @@ class EditorViewport(QOpenGLWidget):
         pieces = sorted(self.scene.pieces, key=lambda p: (sum(p.position), p.position[1]))
         for piece in pieces:
             definition = self.scene.require_definition(piece.piece_id)
-            offset, (sx, sy, sz) = definition.rotated_bounds(piece.rotation)
+            offset, (sx, sy, sz) = definition.rotated_bounds_3d(piece.rotation, piece.rotation_x)
             x = piece.position[0] + offset[0]
             y = piece.position[1] + offset[1]
             z = piece.position[2] + offset[2]
@@ -900,8 +952,15 @@ class EditorViewport(QOpenGLWidget):
         if definition is None:
             return None
         rotation = self.active_rotation
-        position = piece_position_for_target(definition, rotation, target_cell, normal)
-        return PieceInstance(definition.id, position, rotation, self.active_color_id)
+        rotation_x = self.active_rotation_x
+        position = piece_position_for_target(definition, rotation, target_cell, normal, rotation_x)
+        return PieceInstance(
+            definition.id,
+            position,
+            rotation,
+            self.active_color_id,
+            rotation_x=rotation_x,
+        )
 
     def _begin_3d_stroke(self, point: QPoint, modifiers: Qt.KeyboardModifier) -> None:
         if self.read_only or self.renderer3d is None:
@@ -938,10 +997,13 @@ class EditorViewport(QOpenGLWidget):
             candidates: list[PieceInstance] = []
             for cell in cells:
                 candidate = self._candidate_for_target(cell, stroke.normal)
-                if candidate is None or candidate.position in stroke.placed_positions:
+                if candidate is None:
                     continue
-                stroke.placed_positions.add(candidate.position)
-                candidates.append(candidate)
+                for instance in self._symmetry_candidates(candidate):
+                    if instance.position in stroke.placed_positions:
+                        continue
+                    stroke.placed_positions.add(instance.position)
+                    candidates.append(instance)
             if not candidates:
                 return
             _, errors = self.document.add_instances(candidates)
@@ -950,6 +1012,8 @@ class EditorViewport(QOpenGLWidget):
             return
 
         instance_ids: list[str] = []
+        if self.symmetry_draw:
+            cells = [target for x, y, z in cells for target in ((x, y, z), (-x - 1, y, z))]
         for cell in cells:
             instance_id = self.scene.instance_id_at(cell)
             if instance_id is None or instance_id in stroke.affected_ids:
@@ -969,6 +1033,14 @@ class EditorViewport(QOpenGLWidget):
                 self.document.replace_many(replacements)
             except PlacementError as exc:
                 self.status_message.emit(str(exc))
+
+    def _symmetry_candidates(self, candidate: PieceInstance) -> tuple[PieceInstance, ...]:
+        if not self.symmetry_draw:
+            return (candidate,)
+        mirrored = mirrored_piece_yz(self.scene.require_definition(candidate.piece_id), candidate)
+        if self.scene.cells_for(candidate) == self.scene.cells_for(mirrored):
+            return (candidate,)
+        return candidate, mirrored
 
     def _update_3d_hover(self, point: QPoint, modifiers: Qt.KeyboardModifier) -> None:
         if self.renderer3d is None or self.brush_stroke3d is not None:
@@ -990,12 +1062,15 @@ class EditorViewport(QOpenGLWidget):
             target = self._target_cell_from_hit(hit, mode)
             candidate = self._candidate_for_target(target, hit.normal)
             if candidate is not None:
-                try:
-                    self.scene.validate(candidate)
-                    color = self._preview_rgba(self.active_color_id, 0.52)
-                except PlacementError:
-                    color = (0.95, 0.12, 0.12, 0.58)
-                preview = RenderPreview(candidate, color)
+                previews = []
+                for instance in self._symmetry_candidates(candidate):
+                    try:
+                        self.scene.validate(instance)
+                        color = self._preview_rgba(self.active_color_id, 0.52)
+                    except PlacementError:
+                        color = (0.95, 0.12, 0.12, 0.58)
+                    previews.append(RenderPreview(instance, color))
+                preview = replace(previews[0], companions=tuple(previews[1:]))
         elif hit.instance_id:
             piece = self.scene.piece_by_id(hit.instance_id)
             if piece is not None:
@@ -1005,6 +1080,11 @@ class EditorViewport(QOpenGLWidget):
                     else self._preview_rgba(self.active_color_id, 0.62)
                 )
                 preview = RenderPreview(piece, color)
+                if self.symmetry_draw:
+                    x, y, z = hit.cell
+                    mirrored = self.scene.piece_at((-x - 1, y, z))
+                    if mirrored is not None and mirrored.instance_id != piece.instance_id:
+                        preview = replace(preview, companions=(RenderPreview(mirrored, color),))
         return preview
 
     def _preview_rgba(self, color_id: int, alpha: float) -> tuple[float, float, float, float]:
@@ -1062,7 +1142,8 @@ class EditorViewport(QOpenGLWidget):
             self.delete_selection()
         elif event.key() == Qt.Key.Key_R:
             delta = -45 if event.modifiers() & Qt.KeyboardModifier.ShiftModifier else 45
-            self.rotate_current(delta)
+            axis = "x" if event.modifiers() & Qt.KeyboardModifier.AltModifier else "y"
+            self.rotate_current(delta, axis)
         elif event.key() == Qt.Key.Key_F and self.allow_3d:
             self.set_view_mode(ViewMode.FRONT)
         else:
@@ -1132,6 +1213,7 @@ class EditorViewport(QOpenGLWidget):
             (cell[0], cell[1], self.current_layer),
             self.active_rotation,
             self.active_color_id,
+            rotation_x=self.active_rotation_x,
         )
         try:
             self.scene.validate_reference_bounds(instance)
@@ -1154,7 +1236,7 @@ class EditorViewport(QOpenGLWidget):
         selected: set[str] = set()
         for piece in self.scene.pieces:
             definition = self.scene.require_definition(piece.piece_id)
-            offset, (sx, sy, sz) = definition.rotated_bounds(piece.rotation)
+            offset, (sx, sy, sz) = definition.rotated_bounds_3d(piece.rotation, piece.rotation_x)
             x = piece.position[0] + offset[0]
             y = piece.position[1] + offset[1]
             z = piece.position[2] + offset[2]
@@ -1190,7 +1272,9 @@ class EditorViewport(QOpenGLWidget):
     def _project_piece_3d(self, piece: PieceInstance) -> QPolygonF | None:
         if self.renderer3d is None:
             return None
-        offset, size = self.scene.require_definition(piece.piece_id).rotated_bounds(piece.rotation)
+        offset, size = self.scene.require_definition(piece.piece_id).rotated_bounds_3d(
+            piece.rotation, piece.rotation_x
+        )
         minimum = tuple(piece.position[index] + offset[index] for index in range(3))
         maximum = tuple(minimum[index] + size[index] for index in range(3))
         ratio = self.devicePixelRatioF()

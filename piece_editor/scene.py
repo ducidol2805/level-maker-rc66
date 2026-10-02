@@ -10,7 +10,7 @@ class PlacementError(ValueError):
     pass
 
 
-EDITOR_BOUNDS: Vec3i = (30, 30, 30)
+EDITOR_BOUNDS: Vec3i = (50, 50, 50)
 
 
 @dataclass(slots=True)
@@ -34,7 +34,7 @@ class Scene:
 
     def cells_for(self, instance: PieceInstance) -> tuple[Vec3i, ...]:
         definition = self.require_definition(instance.piece_id)
-        offset, (sx, sy, sz) = definition.rotated_bounds(instance.rotation)
+        offset, (sx, sy, sz) = definition.rotated_bounds_3d(instance.rotation, instance.rotation_x)
         px, py, pz = instance.position
         return tuple(
             (px + offset[0] + dx, py + offset[1] + dy, pz + offset[2] + dz)
@@ -68,23 +68,29 @@ class Scene:
         """Exclusive centered depth bound."""
         return self.min_z + self.bounds[2]
 
-    def validate(self, instance: PieceInstance, ignore_ids: Iterable[str] = ()) -> None:
+    def contains_cell(self, cell: Vec3i) -> bool:
+        return (
+            self.min_x <= cell[0] < self.max_x
+            and 0 <= cell[1] < self.bounds[1]
+            and self.min_z <= cell[2] < self.max_z
+        )
+
+    def validate(self, instance: PieceInstance) -> None:
         definition = self.require_definition(instance.piece_id)
         if instance.rotation not in definition.allowed_rotations:
             raise PlacementError(f"Rotation {instance.rotation} is not allowed for {instance.piece_id}")
-        ignored = set(ignore_ids)
-        _, by, _ = self.bounds
+        if instance.rotation_x not in definition.allowed_rotations:
+            raise PlacementError(f"X rotation {instance.rotation_x} is not allowed for {instance.piece_id}")
         for cell in self.cells_for(instance):
-            if not 0 <= cell[1] < by:
+            if not self.contains_cell(cell):
                 raise PlacementError(f"Piece is outside scene bounds at {cell}")
-            occupant = self._occupied.get(cell)
-            if occupant is not None and occupant not in ignored:
-                raise PlacementError(f"Cell {cell} is already occupied")
 
     def validate_reference_bounds(self, instance: PieceInstance) -> None:
         for cell in self.cells_for(instance):
             if not (self.min_x <= cell[0] < self.max_x and self.min_z <= cell[2] < self.max_z):
-                raise PlacementError(f"Piece is outside the 30x30 Front canvas at {cell}")
+                raise PlacementError(
+                    f"Piece is outside the {self.bounds[0]}x{self.bounds[2]} Front canvas at {cell}"
+                )
 
     @property
     def occupied_bounds(self) -> tuple[Vec3i, Vec3i] | None:
@@ -161,8 +167,7 @@ class Scene:
         self._occupied_bounds = None
         for piece in self.pieces:
             for cell in self.cells_for(piece):
-                if cell in self._occupied:
-                    raise PlacementError(f"Overlapping scene data at {cell}")
+                # Picking uses the last piece; all overlapping pieces stay in the scene.
                 self._occupied[cell] = piece.instance_id
                 self._include_occupied_cell(cell)
 

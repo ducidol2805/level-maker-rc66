@@ -1,0 +1,756 @@
+{
+  "version": 1,
+  "library": "D:\\Project\\level-maker-rc66\\library",
+  "bounds": [
+    30,
+    30,
+    30
+  ],
+  "palette": [
+    {
+      "id": 0,
+      "name": "Color 01",
+      "rgb": "#BE4A2F"
+    },
+    {
+      "id": 1,
+      "name": "Color 02",
+      "rgb": "#D77643"
+    },
+    {
+      "id": 2,
+      "name": "Color 03",
+      "rgb": "#EAD4AA"
+    },
+    {
+      "id": 3,
+      "name": "Color 04",
+      "rgb": "#E4A672"
+    },
+    {
+      "id": 4,
+      "name": "Color 05",
+      "rgb": "#B86F50"
+    },
+    {
+      "id": 5,
+      "name": "Color 06",
+      "rgb": "#733E39"
+    },
+    {
+      "id": 6,
+      "name": "Color 07",
+      "rgb": "#3E2731"
+    },
+    {
+      "id": 7,
+      "name": "Color 08",
+      "rgb": "#A22633"
+    },
+    {
+      "id": 8,
+      "name": "Color 09",
+      "rgb": "#E43B44"
+    },
+    {
+      "id": 9,
+      "name": "Color 10",
+      "rgb": "#F77622"
+    },
+    {
+      "id": 10,
+      "name": "Color 11",
+      "rgb": "#FEAE34"
+    },
+    {
+      "id": 11,
+      "name": "Color 12",
+      "rgb": "#FEE761"
+    },
+    {
+      "id": 12,
+      "name": "Color 13",
+      "rgb": "#63C74D"
+    },
+    {
+      "id": 13,
+      "name": "Color 14",
+      "rgb": "#3E8948"
+    },
+    {
+      "id": 14,
+      "name": "Color 15",
+      "rgb": "#265C42"
+    },
+    {
+      "id": 15,
+      "name": "Color 16",
+      "rgb": "#193C3E"
+    },
+    {
+      "id": 16,
+      "name": "Color 17",
+      "rgb": "#124E89"
+    },
+    {
+      "id": 17,
+      "name": "Color 18",
+      "rgb": "#0099DB"
+    },
+    {
+      "id": 18,
+      "name": "Color 19",
+      "rgb": "#2CE8F5"
+    },
+    {
+      "id": 19,
+      "name": "Color 20",
+      "rgb": "#FFFFFF"
+    },
+    {
+      "id": 20,
+      "name": "Color 21",
+      "rgb": "#C0CBDC"
+    },
+    {
+      "id": 21,
+      "name": "Color 22",
+      "rgb": "#8B9BB4"
+    },
+    {
+      "id": 22,
+      "name": "Color 23",
+      "rgb": "#5A6988"
+    },
+    {
+      "id": 23,
+      "name": "Color 24",
+      "rgb": "#3A4466"
+    },
+    {
+      "id": 24,
+      "name": "Color 25",
+      "rgb": "#262B44"
+    },
+    {
+      "id": 25,
+      "name": "Color 26",
+      "rgb": "#181425"
+    },
+    {
+      "id": 26,
+      "name": "Color 27",
+      "rgb": "#FF0044"
+    },
+    {
+      "id": 27,
+      "name": "Color 28",
+      "rgb": "#68386C"
+    },
+    {
+      "id": 28,
+      "name": "Color 29",
+      "rgb": "#B55088"
+    },
+    {
+      "id": 29,
+      "name": "Color 30",
+      "rgb": "#F6757A"
+    },
+    {
+      "id": 30,
+      "name": "Color 31",
+      "rgb": "#E8B796"
+    },
+    {
+      "id": 31,
+      "name": "Color 32",
+      "rgb": "#C28569"
+    }
+  ],
+  "pieces": [
+    {
+      "piece_id": "blk_001",
+      "position": [
+        -3,
+        0,
+        1
+      ],
+      "rotation": 0,
+      "color_id": 3,
+      "instance_id": "9becc11762ec4c6896a27bf12cd0b614"
+    },
+    {
+      "piece_id": "blk_001",
+      "position": [
+        -3,
+        0,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 3,
+      "instance_id": "87cd50f97d2f4d9b83dd5ab958150941"
+    },
+    {
+      "piece_id": "blk_001",
+      "position": [
+        -3,
+        0,
+        -1
+      ],
+      "rotation": 0,
+      "color_id": 3,
+      "instance_id": "4b0110b09a8b4be9b7371217811ed60c"
+    },
+    {
+      "piece_id": "blk_001",
+      "position": [
+        -3,
+        0,
+        -2
+      ],
+      "rotation": 0,
+      "color_id": 3,
+      "instance_id": "c6d9b10ee4d04a7b93f4ccf6ba7e9cb0"
+    },
+    {
+      "piece_id": "blk_001",
+      "position": [
+        -3,
+        0,
+        -3
+      ],
+      "rotation": 0,
+      "color_id": 3,
+      "instance_id": "72cf2fdd4c8e4af58b263574a7d7fa71"
+    },
+    {
+      "piece_id": "blk_001",
+      "position": [
+        -2,
+        0,
+        -3
+      ],
+      "rotation": 0,
+      "color_id": 3,
+      "instance_id": "f88e84b3d1354828b1b5b760709433b3"
+    },
+    {
+      "piece_id": "blk_001",
+      "position": [
+        -1,
+        0,
+        -3
+      ],
+      "rotation": 0,
+      "color_id": 3,
+      "instance_id": "7175c44a91794924a9d01ddd71239be2"
+    },
+    {
+      "piece_id": "blk_001",
+      "position": [
+        0,
+        0,
+        -3
+      ],
+      "rotation": 0,
+      "color_id": 3,
+      "instance_id": "553f8b8ca18848c197d3f41ad4902345"
+    },
+    {
+      "piece_id": "blk_001",
+      "position": [
+        1,
+        0,
+        -3
+      ],
+      "rotation": 0,
+      "color_id": 3,
+      "instance_id": "dcf4bcea9efd4025a553517ded7f9581"
+    },
+    {
+      "piece_id": "blk_001",
+      "position": [
+        1,
+        0,
+        -2
+      ],
+      "rotation": 0,
+      "color_id": 3,
+      "instance_id": "8d0fb989ecd2435dad4d6120fa2010eb"
+    },
+    {
+      "piece_id": "blk_001",
+      "position": [
+        1,
+        0,
+        -1
+      ],
+      "rotation": 0,
+      "color_id": 3,
+      "instance_id": "4e67447099d4405ebbbd385e2a2b8349"
+    },
+    {
+      "piece_id": "blk_001",
+      "position": [
+        1,
+        0,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 3,
+      "instance_id": "aacdcad9013749b0b5e895b9d65496a0"
+    },
+    {
+      "piece_id": "blk_001",
+      "position": [
+        1,
+        0,
+        1
+      ],
+      "rotation": 0,
+      "color_id": 3,
+      "instance_id": "200cd543461a4853ac4b69be79e7e6bb"
+    },
+    {
+      "piece_id": "blk_001",
+      "position": [
+        0,
+        0,
+        1
+      ],
+      "rotation": 0,
+      "color_id": 3,
+      "instance_id": "275cf41c8f22456b8d7f5184cc425fc2"
+    },
+    {
+      "piece_id": "blk_001",
+      "position": [
+        -1,
+        0,
+        1
+      ],
+      "rotation": 0,
+      "color_id": 3,
+      "instance_id": "8703364146de4c8b9375a75ff18e0a39"
+    },
+    {
+      "piece_id": "blk_001",
+      "position": [
+        -2,
+        0,
+        1
+      ],
+      "rotation": 0,
+      "color_id": 3,
+      "instance_id": "151f0a2c52304ab9b73270535ea4e3b4"
+    },
+    {
+      "piece_id": "blk_001",
+      "position": [
+        -2,
+        0,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 3,
+      "instance_id": "5aa5f615cecc4866a6298d982d0c4c84"
+    },
+    {
+      "piece_id": "blk_001",
+      "position": [
+        -3,
+        0,
+        -4
+      ],
+      "rotation": 0,
+      "color_id": 3,
+      "instance_id": "d52de36314184c51a754c6590061e235"
+    },
+    {
+      "piece_id": "blk_001",
+      "position": [
+        -2,
+        0,
+        -4
+      ],
+      "rotation": 0,
+      "color_id": 3,
+      "instance_id": "51a74fd9b08e4a27ac0854be9c8953d4"
+    },
+    {
+      "piece_id": "blk_001",
+      "position": [
+        -1,
+        0,
+        -2
+      ],
+      "rotation": 0,
+      "color_id": 3,
+      "instance_id": "08214b12b91f4912953dfd619630890e"
+    },
+    {
+      "piece_id": "blk_001",
+      "position": [
+        -2,
+        0,
+        -1
+      ],
+      "rotation": 0,
+      "color_id": 3,
+      "instance_id": "27f1dbc1856c4df9a096dc199596d987"
+    },
+    {
+      "piece_id": "blk_001",
+      "position": [
+        -2,
+        0,
+        -2
+      ],
+      "rotation": 0,
+      "color_id": 3,
+      "instance_id": "06230e4bf22a4ab1b87084103eeab3d5"
+    },
+    {
+      "piece_id": "blk_001",
+      "position": [
+        8,
+        0,
+        -1
+      ],
+      "rotation": 0,
+      "color_id": 3,
+      "instance_id": "cc7a4718c92149899be8691df6c754a4"
+    },
+    {
+      "piece_id": "blk_001",
+      "position": [
+        9,
+        0,
+        -1
+      ],
+      "rotation": 0,
+      "color_id": 3,
+      "instance_id": "e48a264c88424d6c90e8b413ce408a79"
+    },
+    {
+      "piece_id": "blk_001",
+      "position": [
+        9,
+        0,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 3,
+      "instance_id": "dd1b1413cb1249548c7349fad58522af"
+    },
+    {
+      "piece_id": "blk_001",
+      "position": [
+        8,
+        0,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 3,
+      "instance_id": "27974993d3cb4324adbde8d55052ebe6"
+    },
+    {
+      "piece_id": "blk_001",
+      "position": [
+        9,
+        0,
+        -2
+      ],
+      "rotation": 0,
+      "color_id": 3,
+      "instance_id": "838b1410eb714eb3baa265f6b351b3e5"
+    },
+    {
+      "piece_id": "blk_001",
+      "position": [
+        8,
+        1,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 3,
+      "instance_id": "f209a9851fe14552a54df8b0c4ef244c"
+    },
+    {
+      "piece_id": "blk_001",
+      "position": [
+        8,
+        1,
+        -1
+      ],
+      "rotation": 0,
+      "color_id": 3,
+      "instance_id": "3ca63e9297da471eb24d5b14beb1846d"
+    },
+    {
+      "piece_id": "blk_001",
+      "position": [
+        9,
+        1,
+        -1
+      ],
+      "rotation": 0,
+      "color_id": 3,
+      "instance_id": "104dc562b2e74ab9917fafd9d49029bb"
+    },
+    {
+      "piece_id": "blk_001",
+      "position": [
+        9,
+        1,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 3,
+      "instance_id": "906f6e069a414ad69baa48c87b4374de"
+    },
+    {
+      "piece_id": "blk_001",
+      "position": [
+        10,
+        1,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 3,
+      "instance_id": "f5587eda2b2a4a69804fb4b65b2383bf"
+    },
+    {
+      "piece_id": "blk_001",
+      "position": [
+        10,
+        2,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 3,
+      "instance_id": "3c6b86c3506446499f964a36541ba9da"
+    },
+    {
+      "piece_id": "blk_001",
+      "position": [
+        10,
+        1,
+        -1
+      ],
+      "rotation": 0,
+      "color_id": 3,
+      "instance_id": "5054fa8a7dae4ee89f2c0b094e56317b"
+    },
+    {
+      "piece_id": "blk_001",
+      "position": [
+        9,
+        2,
+        -1
+      ],
+      "rotation": 0,
+      "color_id": 3,
+      "instance_id": "893096b674714eda9efa325a9adf68a3"
+    },
+    {
+      "piece_id": "blk_001",
+      "position": [
+        8,
+        2,
+        -1
+      ],
+      "rotation": 0,
+      "color_id": 3,
+      "instance_id": "3423ed00624b479ca0475d0f816da96a"
+    },
+    {
+      "piece_id": "blk_001",
+      "position": [
+        8,
+        2,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 3,
+      "instance_id": "26c4c12d4b644594997cbd208a88c1ea"
+    },
+    {
+      "piece_id": "blk_001",
+      "position": [
+        9,
+        2,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 3,
+      "instance_id": "03131a3b279848feae3af560b71a7768"
+    },
+    {
+      "piece_id": "blk_001",
+      "position": [
+        10,
+        2,
+        -1
+      ],
+      "rotation": 0,
+      "color_id": 3,
+      "instance_id": "e036e7d69fc245bc8093cf641874f677"
+    },
+    {
+      "piece_id": "blk_001",
+      "position": [
+        9,
+        2,
+        1
+      ],
+      "rotation": 0,
+      "color_id": 3,
+      "instance_id": "a09b78049fca4a95b626a685d2e78e99"
+    },
+    {
+      "piece_id": "blk_001",
+      "position": [
+        10,
+        2,
+        1
+      ],
+      "rotation": 0,
+      "color_id": 3,
+      "instance_id": "5c6bd5376a224c5dbad2b854e16d76b9"
+    },
+    {
+      "piece_id": "blk_001",
+      "position": [
+        8,
+        2,
+        1
+      ],
+      "rotation": 0,
+      "color_id": 3,
+      "instance_id": "019807224d404800b0e229ee1105c7fd"
+    },
+    {
+      "piece_id": "blk_001",
+      "position": [
+        8,
+        1,
+        1
+      ],
+      "rotation": 0,
+      "color_id": 3,
+      "instance_id": "7070e7426d89460ba5a3d6634dd4e9c7"
+    },
+    {
+      "piece_id": "blk_001",
+      "position": [
+        9,
+        1,
+        1
+      ],
+      "rotation": 0,
+      "color_id": 3,
+      "instance_id": "b2f9165cda0d4408b6ab039829381ce6"
+    },
+    {
+      "piece_id": "blk_001",
+      "position": [
+        10,
+        1,
+        1
+      ],
+      "rotation": 0,
+      "color_id": 3,
+      "instance_id": "c03b4ad61e1b47c0850646545f142c00"
+    },
+    {
+      "piece_id": "blk_001",
+      "position": [
+        7,
+        1,
+        -1
+      ],
+      "rotation": 0,
+      "color_id": 3,
+      "instance_id": "679c8415adeb4443b109ef73b0d1a621"
+    },
+    {
+      "piece_id": "blk_001",
+      "position": [
+        7,
+        1,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 3,
+      "instance_id": "797ed3b4dc514780a91b204e0b0fb16d"
+    },
+    {
+      "piece_id": "blk_001",
+      "position": [
+        6,
+        1,
+        -1
+      ],
+      "rotation": 0,
+      "color_id": 3,
+      "instance_id": "a6bcd10a1bad4f298a7bcf0690c066a8"
+    },
+    {
+      "piece_id": "blk_001",
+      "position": [
+        6,
+        1,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 3,
+      "instance_id": "0628e9d59a054160a2b200054d8d34de"
+    },
+    {
+      "piece_id": "blk_001",
+      "position": [
+        7,
+        2,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 3,
+      "instance_id": "de5dc5aa28eb4c98999761c446aa98e8"
+    },
+    {
+      "piece_id": "blk_001",
+      "position": [
+        7,
+        2,
+        -1
+      ],
+      "rotation": 0,
+      "color_id": 3,
+      "instance_id": "c0e0155d2326410ead2ad7ffae2dc214"
+    },
+    {
+      "piece_id": "blk_001",
+      "position": [
+        8,
+        3,
+        -1
+      ],
+      "rotation": 0,
+      "color_id": 3,
+      "instance_id": "668d85ee8ef444ac8d67fe76ea15c77d"
+    },
+    {
+      "piece_id": "blk_001",
+      "position": [
+        8,
+        3,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 3,
+      "instance_id": "34d9abe8569740f3865834224d011f3a"
+    }
+  ]
+}

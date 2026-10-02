@@ -303,7 +303,10 @@ class PropertiesPanel(QWidget):
         self.position[0].setRange(-1024, 1024)
         self.rotation = QComboBox()
         self.rotation.addItems(["0", "45", "90", "135", "180", "225", "270", "315"])
-        form.addRow("Rotation", self.rotation)
+        form.addRow("Rotation Y", self.rotation)
+        self.rotation_x = QComboBox()
+        self.rotation_x.addItems(["0", "45", "90", "135", "180", "225", "270", "315"])
+        form.addRow("Rotation X", self.rotation_x)
         self.color = QComboBox()
         self.set_palette(palette)
         form.addRow("Color", self.color)
@@ -341,6 +344,7 @@ class PropertiesPanel(QWidget):
         self.position[1].setEnabled(len(pieces) == 1)
         self.position[2].setEnabled(len(pieces) == 1)
         self.rotation.setCurrentText(str(first.rotation))
+        self.rotation_x.setCurrentText(str(first.rotation_x))
         color_index = self.color.findData(first.color_id)
         if color_index >= 0:
             self.color.setCurrentIndex(color_index)
@@ -350,6 +354,7 @@ class PropertiesPanel(QWidget):
         values = {
             "position": tuple(spin.value() for spin in self.position) if self.position[0].isEnabled() else None,
             "rotation": int(self.rotation.currentText()),
+            "rotation_x": int(self.rotation_x.currentText()),
             "color_id": int(self.color.currentData()),
             "group_id": self.group.text().strip() or None,
         }
@@ -419,11 +424,11 @@ class AIBuildPanel(QWidget):
         layout.addWidget(self.drop, 1)
         form = QFormLayout()
         self.width = QSpinBox()
-        self.width.setRange(1, 30)
+        self.width.setRange(1, EDITOR_BOUNDS[0])
         self.width.setValue(20)
         self.height = QSpinBox()
-        self.height.setRange(4, 30)
-        self.height.setValue(30)
+        self.height.setRange(4, EDITOR_BOUNDS[1])
+        self.height.setValue(EDITOR_BOUNDS[1])
         self.depth = QSpinBox()
         self.depth.setRange(1, 8)
         self.depth.setValue(1)
@@ -498,7 +503,8 @@ class AIBuildPanel(QWidget):
         self.width.setValue(min(self.width.maximum(), calculated))
         if calculated > self.width.maximum():
             self.width.setToolTip(
-                f"Source width {source_width} ÷ scale {self.scale.value()} = {calculated}; limited to 30 by canvas"
+                f"Source width {source_width} ÷ scale {self.scale.value()} = {calculated}; "
+                f"limited to {self.width.maximum()} by canvas"
             )
         else:
             self.width.setToolTip(f"Source width {source_width} ÷ scale {self.scale.value()} = {calculated}")
@@ -582,7 +588,12 @@ class ToolboxPanel(QWidget):
 class LayerButtonStrip(QWidget):
     value_changed = Signal(int)
 
-    def __init__(self, minimum: int = -15, maximum: int = 14, value: int = 0) -> None:
+    def __init__(
+        self,
+        minimum: int = -(EDITOR_BOUNDS[2] // 2),
+        maximum: int = EDITOR_BOUNDS[2] // 2 - 1,
+        value: int = 0,
+    ) -> None:
         super().__init__()
         self.minimum = minimum
         self.maximum = maximum
@@ -661,7 +672,15 @@ class ViewportPanel(QFrame):
         content_layout = QHBoxLayout(content)
         content_layout.setContentsMargins(0, 0, 0, 0)
         content_layout.setSpacing(0)
-        self.layer_selector = LayerButtonStrip(value=viewport.current_layer) if show_layer_buttons else None
+        self.layer_selector = (
+            LayerButtonStrip(
+                minimum=viewport.scene.min_z,
+                maximum=viewport.scene.max_z - 1,
+                value=viewport.current_layer,
+            )
+            if show_layer_buttons
+            else None
+        )
         if self.layer_selector is not None:
             self.layer_selector.value_changed.connect(viewport.set_layer)
             viewport.layer_changed.connect(self.layer_selector.set_value)
@@ -822,10 +841,16 @@ class MainWindow(QMainWindow):
         redo.setShortcut(QKeySequence.StandardKey.Redo)
         duplicate = edit_menu.addAction("Duplicate", self.viewport.duplicate_selection)
         duplicate.setShortcut(QKeySequence("Ctrl+D"))
-        rotate_clockwise = edit_menu.addAction("Rotate +45°", lambda: self.viewport.rotate_current(45))
+        rotate_clockwise = edit_menu.addAction("Rotate Y +45°", lambda: self.viewport.rotate_current(45, "y"))
         rotate_clockwise.setShortcut(QKeySequence("R"))
-        rotate_counterclockwise = edit_menu.addAction("Rotate -45°", lambda: self.viewport.rotate_current(-45))
+        rotate_counterclockwise = edit_menu.addAction("Rotate Y -45°", lambda: self.viewport.rotate_current(-45, "y"))
         rotate_counterclockwise.setShortcut(QKeySequence("Shift+R"))
+        rotate_x_clockwise = edit_menu.addAction("Rotate X +45°", lambda: self.viewport.rotate_current(45, "x"))
+        rotate_x_clockwise.setShortcut(QKeySequence("Alt+R"))
+        rotate_x_counterclockwise = edit_menu.addAction(
+            "Rotate X -45°", lambda: self.viewport.rotate_current(-45, "x")
+        )
+        rotate_x_counterclockwise.setShortcut(QKeySequence("Alt+Shift+R"))
         delete = edit_menu.addAction("Delete", self.viewport.delete_selection)
         delete.setShortcut(QKeySequence.StandardKey.Delete)
 

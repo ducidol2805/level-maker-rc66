@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from .document import EditorTool
-from .domain import PieceDef, Vec3i
+from .domain import PieceDef, PieceInstance, Vec3i
 from .renderer3d import RayHit
 
 
@@ -20,13 +20,33 @@ class BrushStroke3D:
     placed_positions: set[Vec3i] = field(default_factory=set)
 
 
+def mirrored_piece_yz(definition: PieceDef, piece: PieceInstance) -> PieceInstance:
+    """Reflect the occupied box across world X=0, preserving brush orientation."""
+    rotation = piece.rotation
+    offset, size = definition.rotated_bounds_3d(piece.rotation, piece.rotation_x)
+    x, y, z = piece.position
+    return PieceInstance(
+        piece.piece_id,
+        (
+            -(x + offset[0] + size[0]) - offset[0],
+            y,
+            z,
+        ),
+        rotation,
+        piece.color_id,
+        group_id=piece.group_id,
+        rotation_x=piece.rotation_x,
+    )
+
+
 def piece_position_for_target(
     definition: PieceDef,
     rotation: int,
     target_cell: Vec3i,
     normal: Vec3i,
+    rotation_x: int = 0,
 ) -> Vec3i:
-    offset, size = definition.rotated_bounds(rotation)
+    offset, size = definition.rotated_bounds_3d(rotation, rotation_x)
     axis = normal_axis(normal)
     result = [
         target_cell[index] - int(round(definition.pivot[index] - 0.5))  # type: ignore[index]

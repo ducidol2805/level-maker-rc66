@@ -26,6 +26,7 @@ class EditorDocument(QObject):
     tool_changed = Signal(object)
     active_piece_changed = Signal(str)
     active_rotation_changed = Signal(int)
+    active_rotation_x_changed = Signal(int)
     active_color_changed = Signal(int)
 
     def __init__(self, scene: Scene, active_color_id: int = 0) -> None:
@@ -36,6 +37,7 @@ class EditorDocument(QObject):
         self.tool = EditorTool.PLACE
         self.active_piece_id = next(iter(scene.piece_defs), "")
         self.active_rotation = self._default_rotation(self.active_piece_id)
+        self.active_rotation_x = self._default_rotation(self.active_piece_id)
         self.active_color_id = active_color_id
         self._stroke_active = False
         self._stroke_checkpointed = False
@@ -43,6 +45,7 @@ class EditorDocument(QObject):
     def reset_scene(self, scene: Scene) -> None:
         old_active_piece = self.active_piece_id
         old_active_rotation = self.active_rotation
+        old_active_rotation_x = self.active_rotation_x
         self.scene = scene
         self.history = SceneHistory(scene)
         self.selection.clear()
@@ -50,6 +53,8 @@ class EditorDocument(QObject):
             self.active_piece_id = next(iter(scene.piece_defs), "")
         if self.active_rotation not in self._allowed_rotations(self.active_piece_id):
             self.active_rotation = self._default_rotation(self.active_piece_id)
+        if self.active_rotation_x not in self._allowed_rotations(self.active_piece_id):
+            self.active_rotation_x = self._default_rotation(self.active_piece_id)
         self._stroke_active = False
         self._stroke_checkpointed = False
         self.selection_changed.emit()
@@ -57,6 +62,8 @@ class EditorDocument(QObject):
             self.active_piece_changed.emit(self.active_piece_id)
         if self.active_rotation != old_active_rotation:
             self.active_rotation_changed.emit(self.active_rotation)
+        if self.active_rotation_x != old_active_rotation_x:
+            self.active_rotation_x_changed.emit(self.active_rotation_x)
         self.scene_changed.emit()
 
     def set_tool(self, tool: EditorTool) -> None:
@@ -72,21 +79,35 @@ class EditorDocument(QObject):
         if self.active_rotation not in self._allowed_rotations(piece_id):
             self.active_rotation = self._default_rotation(piece_id)
             self.active_rotation_changed.emit(self.active_rotation)
+        if self.active_rotation_x not in self._allowed_rotations(piece_id):
+            self.active_rotation_x = self._default_rotation(piece_id)
+            self.active_rotation_x_changed.emit(self.active_rotation_x)
         self.active_piece_changed.emit(piece_id)
 
     def rotate_active_piece(self, delta: int) -> None:
+        self._rotate_active_axis("y", delta)
+
+    def rotate_active_piece_x(self, delta: int) -> None:
+        self._rotate_active_axis("x", delta)
+
+    def _rotate_active_axis(self, axis: str, delta: int) -> None:
         allowed = self._allowed_rotations(self.active_piece_id)
         if not allowed:
             return
-        desired = (self.active_rotation + delta) % 360
+        current = self.active_rotation_x if axis == "x" else self.active_rotation
+        desired = (current + delta) % 360
         if desired not in allowed:
             direction = 1 if delta > 0 else -1
-            index = allowed.index(self.active_rotation) if self.active_rotation in allowed else 0
+            index = allowed.index(current) if current in allowed else 0
             desired = allowed[(index + direction) % len(allowed)]
-        if desired == self.active_rotation:
+        if desired == current:
             return
-        self.active_rotation = desired
-        self.active_rotation_changed.emit(desired)
+        if axis == "x":
+            self.active_rotation_x = desired
+            self.active_rotation_x_changed.emit(desired)
+        else:
+            self.active_rotation = desired
+            self.active_rotation_changed.emit(desired)
 
     def _allowed_rotations(self, piece_id: str) -> tuple[int, ...]:
         definition = self.scene.piece_defs.get(piece_id)

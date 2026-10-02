@@ -14,6 +14,7 @@ File game JSON co dang:
       "id": "blk_001",
       "pos": [2, 3, 0],
       "rot": 90,
+      "rot_x": 45,
       "color": 4
     }
   ]
@@ -23,10 +24,11 @@ File game JSON co dang:
 - `id`: ID cua piece, trung voi truong `id` trong `library/**/piece.json`.
 - `pos`: toa do o luoi `[x, y, z]`.
 - `rot`: goc xoay quanh truc Y, tinh bang do.
+- `rot_x`: goc xoay quanh truc X, tinh bang do. Map cu khong co truong nay se dung 0.
 - `color`: ID mau tu 0 den 31.
 
 Racblox va Unity cung dung X sang phai, Y huong len va Z theo chieu sau. Khong
-can doi truc. `rot` duoc gan truc tiep bang `Quaternion.Euler(0, rot, 0)`.
+can doi truc. Hai goc duoc gan bang `Quaternion.Euler(rot_x, rot, 0)`.
 
 ## 2. Chuan bi asset trong Unity
 
@@ -75,6 +77,7 @@ public sealed class RacbloxPieceData
     public string id;
     public int[] pos;
     public int rot;
+    public int rot_x;
     public int color;
 }
 
@@ -190,10 +193,10 @@ public sealed class RacbloxLevelImporter : MonoBehaviour
 
         pivotTransform.localPosition = new Vector3(
             piece.pos[0] + definition.pivot.x,
-            piece.pos[1],
+            piece.pos[1] + definition.pivot.y,
             piece.pos[2] + definition.pivot.z
         ) * cellSize;
-        pivotTransform.localRotation = Quaternion.Euler(0f, piece.rot, 0f);
+        pivotTransform.localRotation = Quaternion.Euler(piece.rot_x, piece.rot, 0f);
 
         ApplyColor(visual, piece.color);
         if (addMeshColliders)
@@ -226,7 +229,7 @@ public sealed class RacbloxLevelImporter : MonoBehaviour
         Vector3 center = definition.size * 0.5f;
         Vector3 targetCenter = new Vector3(
             center.x - definition.pivot.x,
-            center.y,
+            center.y - definition.pivot.y,
             center.z - definition.pivot.z
         ) * cellSize;
         visual.localPosition += targetCenter - bounds.center;

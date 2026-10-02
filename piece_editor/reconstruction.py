@@ -13,7 +13,7 @@ from .solver import EMPTY
 @dataclass(frozen=True, slots=True)
 class ReconstructionSettings:
     target_width: int = 20
-    max_height: int = 30
+    max_height: int = 50
     depth: int = 1
     sample_mode: str = "nearest"
     simplification: int = 35

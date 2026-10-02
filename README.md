@@ -61,7 +61,8 @@ manually adjustable, and the new pixel sizes are saved on exit.
 - Arrow Left / Right: move the selection by one cell on X
 - Page Up / Page Down: move the selection by one cell on Y
 - R / Shift+R: rotate selection +45° / -45° around the Y axis
-- In Brush mode, R / Shift+R rotates the placement ghost and the placed piece uses that rotation
+- Alt+R / Alt+Shift+R: rotate selection +45° / -45° around the X axis
+- In Brush mode, the same shortcuts rotate the placement ghost and the placed piece uses both rotations
 - Rotation uses each piece's grid pivot: even axes use the outer corner box center (`0.5`), while odd axes use the center box
 - Delete: delete selection
 - Ctrl+D: duplicate selection
@@ -69,7 +70,7 @@ manually adjustable, and the new pixel sizes are saved on exit.
 - F: show or hide the Front panel; use the View menu for the 3D panel
 - H: center the Front origin near the bottom and reset the 3D camera
 - Mouse wheel: zoom
-- Front layer buttons: click one of 30 stacked buttons from -15 (top) to 14 (bottom); new scenes start on layer 0
+- Front layer buttons: click one of 50 stacked buttons from -25 (top) to 24 (bottom); new scenes start on layer 0
 - Box Select drag: select every object intersecting the rectangle across all Z layers
 - Shift + Box Select drag: select only objects visible on the current Z layer
 
@@ -88,11 +89,12 @@ manually adjustable, and the new pixel sizes are saved on exit.
 - H: reset the 3D camera
 
 Orbit sensitivity is intentionally reduced for more precise camera control.
-The 3D guide uses a dynamic 1×1 horizontal floor grid, stronger 5-cell guide
-lines, and world axes. X/Z placement is unbounded in 3D, while a subtle 30×30
-border marks the Front canvas reference area. The old upright grid and the
-Toolbox `Layer Z` control have been removed. Front layer controls remain capped
-at `Z = -15` through `14`.
+The 3D guide uses a fixed 50×50 horizontal floor grid, stronger 5-cell guide
+lines, and world axes. Both views enforce X/Z cells from -25 through 24 and Y
+from 0 through 49. Every occupied cell must fit, including rotated and multi-cell
+pieces. Panning moves only the camera; it does not extend the build area. The
+old upright grid and the Toolbox `Layer Z` control have been removed. Front
+layer controls use `Z = -25` through `24`.
 
 Attach places the selected Piece Library item against the pointed face. On an
 empty scene or a missed object it uses the Y=0 construction floor. A drag locks
@@ -103,6 +105,24 @@ valid placement in the active color, invalid placement in red, and whole-piece
 Erase/Paint targets without modifying scene or instance-cache data. Ghost
 geometry remains translucent but renders front faces only, preventing rear or
 interior polygons from bleeding through the visible shell.
+
+Toggle **Symmetry Draw · YZ** in the floating 3D status panel to repeat Brush,
+Erase, and Paint strokes across the world YZ plane at X=0. A cell at X=x maps
+to X=-x-1; multi-cell pieces use their full rotated bounds. Copies retain the
+selected piece, color, and brush orientation. This repeats placement rather
+than flipping mesh geometry. Both sides have ghost previews and share one Undo
+step; out-of-bounds placements are skipped normally. The toggle is
+off by default and applies to the 3D view.
+
+The adjacent **Grid Plane · YZ · 20%** toggle shows a translucent grid on X=0,
+covering the full scene height and depth. Its fill and lines use alpha 0.20;
+the display toggle is independent of Symmetry Draw and starts off.
+
+Placement, duplication, and position edits allow pieces to overlap. Only scene
+bounds and allowed rotations constrain placement; occupied cells do not block
+it. Picking, Paint, and Erase target the last piece in a shared cell. Removing
+it exposes the underlying piece. Overlapping pieces remain separate in project
+files, game exports, and Undo/Redo.
 
 Move remains Front-only in this milestone. Box Select works in both Front and
 3D views. If ModernGL cannot
@@ -140,11 +160,11 @@ New scenes extract their default color IDs from `Palette.png` in pixel order
 (left-to-right, then top-to-bottom), then apply the preferred `color_id` order
 from `Endesga 32 Palette color palette.txt`. Editing that TXT order takes
 effect on the next app launch or New Project. Transparent and duplicate pixels
-are ignored. The Front construction canvas and ruler remain 30×30 cells: X
-spans -15 through 14 and Y spans 0 through 29. Centered, bottom-aligned 10×10
-and 20×20 guide boxes are drawn more strongly than the normal grid; the 30×30
-outer border is strongest. The shared scene may contain 3D-authored objects at
-any X/Z coordinate, even when they sit outside the Front canvas.
+are ignored. The Front construction canvas and ruler remain 50×50 cells: X
+spans -25 through 24 and Y spans 0 through 49. Centered, bottom-aligned 10×10,
+20×20, and 30×30 guide boxes are drawn more strongly than the normal grid; the 50×50
+outer border is strongest. The shared scene enforces these bounds for drawing,
+moving, duplicating, rotating, and loading pieces in either view.
 
 The 32-color palette is displayed as an 8×4 swatch grid at the top-left,
 between the Toolbox and piece library. Swatches divide the available palette
@@ -154,9 +174,9 @@ left column, both center views, and Properties.
 
 AI Build defaults to nearest-neighbor sampling. When a reference image is
 loaded, target width is calculated as `source width // scale`, with scale
-defaulting to 4 and the result capped by the 30-cell canvas. Foreground pixels
+defaulting to 4 and the result capped by the 50-cell canvas. Foreground pixels
 are matched to the nearest available palette color in Lab color space; all 32
 palette colors are enabled by default.
 
 Projects preserve editor metadata such as selection groups. Game export emits
-only piece ID, position, rotation, and color ID.
+piece ID, position, Y rotation (`rot`), X rotation (`rot_x`), and color ID.

@@ -67,24 +67,32 @@ class PieceDef:
         return self.rotated_bounds(rotation)[1]
 
     def rotated_bounds(self, rotation: int) -> tuple[Vec3i, Vec3i]:
-        angle = math.radians(rotation % 360)
-        cosine = math.cos(angle)
-        sine = math.sin(angle)
-        pivot_x, _, pivot_z = self.pivot  # type: ignore[misc]
-        corners = ((0.0, 0.0), (float(self.size[0]), 0.0), (0.0, float(self.size[2])), (float(self.size[0]), float(self.size[2])))
+        return self.rotated_bounds_3d(rotation, 0)
+
+    def rotated_bounds_3d(self, rotation_y: int, rotation_x: int = 0) -> tuple[Vec3i, Vec3i]:
+        angle_y = math.radians(rotation_y % 360)
+        angle_x = math.radians(rotation_x % 360)
+        cos_y, sin_y = math.cos(angle_y), math.sin(angle_y)
+        cos_x, sin_x = math.cos(angle_x), math.sin(angle_x)
+        pivot_x, pivot_y, pivot_z = self.pivot  # type: ignore[misc]
+        corners = tuple(
+            (float(x), float(y), float(z))
+            for x in (0, self.size[0])
+            for y in (0, self.size[1])
+            for z in (0, self.size[2])
+        )
         rotated = tuple(
             (
-                pivot_x + cosine * (x - pivot_x) + sine * (z - pivot_z),
-                pivot_z - sine * (x - pivot_x) + cosine * (z - pivot_z),
+                pivot_x + cos_y * (x - pivot_x) + sin_y * (sin_x * (y - pivot_y) + cos_x * (z - pivot_z)),
+                pivot_y + cos_x * (y - pivot_y) - sin_x * (z - pivot_z),
+                pivot_z - sin_y * (x - pivot_x) + cos_y * (sin_x * (y - pivot_y) + cos_x * (z - pivot_z)),
             )
-            for x, z in corners
+            for x, y, z in corners
         )
-        minimum_x = math.floor(min(x for x, _ in rotated) + 1e-7)
-        maximum_x = math.ceil(max(x for x, _ in rotated) - 1e-7)
-        minimum_z = math.floor(min(z for _, z in rotated) + 1e-7)
-        maximum_z = math.ceil(max(z for _, z in rotated) - 1e-7)
-        offset = (minimum_x, 0, minimum_z)
-        size = (maximum_x - minimum_x, self.size[1], maximum_z - minimum_z)
+        minimum = tuple(math.floor(min(point[axis] for point in rotated) + 1e-7) for axis in range(3))
+        maximum = tuple(math.ceil(max(point[axis] for point in rotated) - 1e-7) for axis in range(3))
+        offset = minimum
+        size = tuple(maximum[axis] - minimum[axis] for axis in range(3))
         return offset, size
 
     @property
@@ -139,10 +147,12 @@ class PieceInstance:
     color_id: int
     group_id: str | None = None
     instance_id: str = field(default_factory=lambda: uuid4().hex)
+    rotation_x: int = 0
 
     def __post_init__(self) -> None:
         self.position = _vec3(self.position, "position")
         self.rotation = int(self.rotation) % 360
+        self.rotation_x = int(self.rotation_x) % 360
         self.color_id = int(self.color_id)
 
     def to_dict(self, editor_metadata: bool = True) -> dict[str, Any]:
@@ -150,6 +160,7 @@ class PieceInstance:
             "piece_id": self.piece_id,
             "position": list(self.position),
             "rotation": self.rotation,
+            "rotation_x": self.rotation_x,
             "color_id": self.color_id,
         }
         if editor_metadata:
@@ -163,6 +174,7 @@ class PieceInstance:
             "id": self.piece_id,
             "pos": list(self.position),
             "rot": self.rotation,
+            "rot_x": self.rotation_x,
             "color": self.color_id,
         }
 
@@ -175,6 +187,7 @@ class PieceInstance:
             color_id=int(data.get("color_id", data.get("color", 0))),
             group_id=data.get("group_id"),
             instance_id=str(data.get("instance_id") or uuid4().hex),
+            rotation_x=int(data.get("rotation_x", data.get("rot_x", 0))),
         )
 
 

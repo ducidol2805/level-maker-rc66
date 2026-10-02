@@ -1,0 +1,1793 @@
+{
+  "version": 1,
+  "library": "..\\library",
+  "bounds": [
+    50,
+    50,
+    50
+  ],
+  "palette": [
+    {
+      "id": 0,
+      "name": "Color 01",
+      "rgb": "#BE4A2F"
+    },
+    {
+      "id": 1,
+      "name": "Color 02",
+      "rgb": "#D77643"
+    },
+    {
+      "id": 2,
+      "name": "Color 03",
+      "rgb": "#EAD4AA"
+    },
+    {
+      "id": 3,
+      "name": "Color 04",
+      "rgb": "#E4A672"
+    },
+    {
+      "id": 4,
+      "name": "Color 05",
+      "rgb": "#B86F50"
+    },
+    {
+      "id": 5,
+      "name": "Color 06",
+      "rgb": "#733E39"
+    },
+    {
+      "id": 6,
+      "name": "Color 07",
+      "rgb": "#3E2731"
+    },
+    {
+      "id": 7,
+      "name": "Color 08",
+      "rgb": "#A22633"
+    },
+    {
+      "id": 8,
+      "name": "Color 09",
+      "rgb": "#E43B44"
+    },
+    {
+      "id": 9,
+      "name": "Color 10",
+      "rgb": "#F77622"
+    },
+    {
+      "id": 10,
+      "name": "Color 11",
+      "rgb": "#FEAE34"
+    },
+    {
+      "id": 11,
+      "name": "Color 12",
+      "rgb": "#FEE761"
+    },
+    {
+      "id": 12,
+      "name": "Color 13",
+      "rgb": "#63C74D"
+    },
+    {
+      "id": 13,
+      "name": "Color 14",
+      "rgb": "#3E8948"
+    },
+    {
+      "id": 14,
+      "name": "Color 15",
+      "rgb": "#265C42"
+    },
+    {
+      "id": 15,
+      "name": "Color 16",
+      "rgb": "#193C3E"
+    },
+    {
+      "id": 16,
+      "name": "Color 17",
+      "rgb": "#124E89"
+    },
+    {
+      "id": 17,
+      "name": "Color 18",
+      "rgb": "#0099DB"
+    },
+    {
+      "id": 18,
+      "name": "Color 19",
+      "rgb": "#2CE8F5"
+    },
+    {
+      "id": 19,
+      "name": "Color 20",
+      "rgb": "#FFFFFF"
+    },
+    {
+      "id": 20,
+      "name": "Color 21",
+      "rgb": "#C0CBDC"
+    },
+    {
+      "id": 21,
+      "name": "Color 22",
+      "rgb": "#8B9BB4"
+    },
+    {
+      "id": 22,
+      "name": "Color 23",
+      "rgb": "#5A6988"
+    },
+    {
+      "id": 23,
+      "name": "Color 24",
+      "rgb": "#3A4466"
+    },
+    {
+      "id": 24,
+      "name": "Color 25",
+      "rgb": "#262B44"
+    },
+    {
+      "id": 25,
+      "name": "Color 26",
+      "rgb": "#181425"
+    },
+    {
+      "id": 26,
+      "name": "Color 27",
+      "rgb": "#FF0044"
+    },
+    {
+      "id": 27,
+      "name": "Color 28",
+      "rgb": "#68386C"
+    },
+    {
+      "id": 28,
+      "name": "Color 29",
+      "rgb": "#B55088"
+    },
+    {
+      "id": 29,
+      "name": "Color 30",
+      "rgb": "#F6757A"
+    },
+    {
+      "id": 30,
+      "name": "Color 31",
+      "rgb": "#E8B796"
+    },
+    {
+      "id": 31,
+      "name": "Color 32",
+      "rgb": "#C28569"
+    }
+  ],
+  "pieces": [
+    {
+      "piece_id": "blk_008",
+      "position": [
+        -7,
+        0,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 16,
+      "instance_id": "robot_001",
+      "group_id": "left_foot"
+    },
+    {
+      "piece_id": "blk_008",
+      "position": [
+        -7,
+        1,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 17,
+      "instance_id": "robot_002",
+      "group_id": "left_foot"
+    },
+    {
+      "piece_id": "blk_008",
+      "position": [
+        -5,
+        0,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 16,
+      "instance_id": "robot_003",
+      "group_id": "left_foot"
+    },
+    {
+      "piece_id": "blk_008",
+      "position": [
+        -5,
+        1,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 17,
+      "instance_id": "robot_004",
+      "group_id": "left_foot"
+    },
+    {
+      "piece_id": "blk_008",
+      "position": [
+        -3,
+        0,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 16,
+      "instance_id": "robot_005",
+      "group_id": "left_foot"
+    },
+    {
+      "piece_id": "blk_008",
+      "position": [
+        -3,
+        1,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 17,
+      "instance_id": "robot_006",
+      "group_id": "left_foot"
+    },
+    {
+      "piece_id": "blk_008",
+      "position": [
+        1,
+        0,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 16,
+      "instance_id": "robot_007",
+      "group_id": "right_foot"
+    },
+    {
+      "piece_id": "blk_008",
+      "position": [
+        1,
+        1,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 17,
+      "instance_id": "robot_008",
+      "group_id": "right_foot"
+    },
+    {
+      "piece_id": "blk_008",
+      "position": [
+        3,
+        0,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 16,
+      "instance_id": "robot_009",
+      "group_id": "right_foot"
+    },
+    {
+      "piece_id": "blk_008",
+      "position": [
+        3,
+        1,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 17,
+      "instance_id": "robot_010",
+      "group_id": "right_foot"
+    },
+    {
+      "piece_id": "blk_008",
+      "position": [
+        5,
+        0,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 16,
+      "instance_id": "robot_011",
+      "group_id": "right_foot"
+    },
+    {
+      "piece_id": "blk_008",
+      "position": [
+        5,
+        1,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 17,
+      "instance_id": "robot_012",
+      "group_id": "right_foot"
+    },
+    {
+      "piece_id": "blk_007",
+      "position": [
+        -6,
+        2,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 8,
+      "instance_id": "robot_013",
+      "group_id": "left_ankle"
+    },
+    {
+      "piece_id": "rmp_002",
+      "position": [
+        -6,
+        1,
+        3
+      ],
+      "rotation": 0,
+      "color_id": 11,
+      "instance_id": "robot_014",
+      "group_id": "left_foot_armor"
+    },
+    {
+      "piece_id": "blk_007",
+      "position": [
+        -4,
+        2,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 8,
+      "instance_id": "robot_015",
+      "group_id": "left_ankle"
+    },
+    {
+      "piece_id": "rmp_002",
+      "position": [
+        -4,
+        1,
+        3
+      ],
+      "rotation": 0,
+      "color_id": 11,
+      "instance_id": "robot_016",
+      "group_id": "left_foot_armor"
+    },
+    {
+      "piece_id": "blk_007",
+      "position": [
+        2,
+        2,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 8,
+      "instance_id": "robot_017",
+      "group_id": "right_ankle"
+    },
+    {
+      "piece_id": "rmp_002",
+      "position": [
+        2,
+        1,
+        3
+      ],
+      "rotation": 0,
+      "color_id": 11,
+      "instance_id": "robot_018",
+      "group_id": "right_foot_armor"
+    },
+    {
+      "piece_id": "blk_007",
+      "position": [
+        4,
+        2,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 8,
+      "instance_id": "robot_019",
+      "group_id": "right_ankle"
+    },
+    {
+      "piece_id": "rmp_002",
+      "position": [
+        4,
+        1,
+        3
+      ],
+      "rotation": 0,
+      "color_id": 11,
+      "instance_id": "robot_020",
+      "group_id": "right_foot_armor"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        -6,
+        3,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 20,
+      "instance_id": "robot_021",
+      "group_id": "left_shin"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        -6,
+        5,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 19,
+      "instance_id": "robot_022",
+      "group_id": "left_shin"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        -6,
+        7,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 19,
+      "instance_id": "robot_023",
+      "group_id": "left_shin"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        -6,
+        9,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 20,
+      "instance_id": "robot_024",
+      "group_id": "left_shin"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        -4,
+        3,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 20,
+      "instance_id": "robot_025",
+      "group_id": "left_shin"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        -4,
+        5,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 19,
+      "instance_id": "robot_026",
+      "group_id": "left_shin"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        -4,
+        7,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 19,
+      "instance_id": "robot_027",
+      "group_id": "left_shin"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        -4,
+        9,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 20,
+      "instance_id": "robot_028",
+      "group_id": "left_shin"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        1,
+        3,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 20,
+      "instance_id": "robot_029",
+      "group_id": "right_shin"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        1,
+        5,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 19,
+      "instance_id": "robot_030",
+      "group_id": "right_shin"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        1,
+        7,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 19,
+      "instance_id": "robot_031",
+      "group_id": "right_shin"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        1,
+        9,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 20,
+      "instance_id": "robot_032",
+      "group_id": "right_shin"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        3,
+        3,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 20,
+      "instance_id": "robot_033",
+      "group_id": "right_shin"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        3,
+        5,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 19,
+      "instance_id": "robot_034",
+      "group_id": "right_shin"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        3,
+        7,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 19,
+      "instance_id": "robot_035",
+      "group_id": "right_shin"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        3,
+        9,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 20,
+      "instance_id": "robot_036",
+      "group_id": "right_shin"
+    },
+    {
+      "piece_id": "tal_001",
+      "position": [
+        -6,
+        3,
+        2
+      ],
+      "rotation": 0,
+      "color_id": 24,
+      "instance_id": "robot_037",
+      "group_id": "left_shin_armor"
+    },
+    {
+      "piece_id": "tal_001",
+      "position": [
+        -6,
+        7,
+        2
+      ],
+      "rotation": 0,
+      "color_id": 8,
+      "instance_id": "robot_038",
+      "group_id": "left_shin_armor"
+    },
+    {
+      "piece_id": "tal_001",
+      "position": [
+        4,
+        3,
+        2
+      ],
+      "rotation": 0,
+      "color_id": 24,
+      "instance_id": "robot_039",
+      "group_id": "right_shin_armor"
+    },
+    {
+      "piece_id": "tal_001",
+      "position": [
+        4,
+        7,
+        2
+      ],
+      "rotation": 0,
+      "color_id": 8,
+      "instance_id": "robot_040",
+      "group_id": "right_shin_armor"
+    },
+    {
+      "piece_id": "tal_001",
+      "position": [
+        -4,
+        4,
+        2
+      ],
+      "rotation": 0,
+      "color_id": 11,
+      "instance_id": "robot_041",
+      "group_id": "left_shin_armor"
+    },
+    {
+      "piece_id": "tal_001",
+      "position": [
+        -4,
+        8,
+        2
+      ],
+      "rotation": 0,
+      "color_id": 21,
+      "instance_id": "robot_042",
+      "group_id": "left_shin_armor"
+    },
+    {
+      "piece_id": "tal_001",
+      "position": [
+        2,
+        4,
+        2
+      ],
+      "rotation": 0,
+      "color_id": 11,
+      "instance_id": "robot_043",
+      "group_id": "right_shin_armor"
+    },
+    {
+      "piece_id": "tal_001",
+      "position": [
+        2,
+        8,
+        2
+      ],
+      "rotation": 0,
+      "color_id": 21,
+      "instance_id": "robot_044",
+      "group_id": "right_shin_armor"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        -5,
+        11,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 24,
+      "instance_id": "robot_045",
+      "group_id": "left_thigh"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        -5,
+        13,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 21,
+      "instance_id": "robot_046",
+      "group_id": "left_thigh"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        -3,
+        11,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 24,
+      "instance_id": "robot_047",
+      "group_id": "left_thigh"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        -3,
+        13,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 21,
+      "instance_id": "robot_048",
+      "group_id": "left_thigh"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        1,
+        11,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 24,
+      "instance_id": "robot_049",
+      "group_id": "right_thigh"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        1,
+        13,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 21,
+      "instance_id": "robot_050",
+      "group_id": "right_thigh"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        3,
+        11,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 24,
+      "instance_id": "robot_051",
+      "group_id": "right_thigh"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        3,
+        13,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 21,
+      "instance_id": "robot_052",
+      "group_id": "right_thigh"
+    },
+    {
+      "piece_id": "arc_001",
+      "position": [
+        -5,
+        12,
+        2
+      ],
+      "rotation": 0,
+      "color_id": 16,
+      "instance_id": "robot_053",
+      "group_id": "left_thigh_armor"
+    },
+    {
+      "piece_id": "arc_001",
+      "position": [
+        3,
+        12,
+        2
+      ],
+      "rotation": 180,
+      "color_id": 16,
+      "instance_id": "robot_054",
+      "group_id": "right_thigh_armor"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        -5,
+        15,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 19,
+      "instance_id": "robot_055",
+      "group_id": "pelvis"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        -3,
+        15,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 19,
+      "instance_id": "robot_056",
+      "group_id": "pelvis"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        -1,
+        15,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 20,
+      "instance_id": "robot_057",
+      "group_id": "pelvis"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        1,
+        15,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 19,
+      "instance_id": "robot_058",
+      "group_id": "pelvis"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        3,
+        15,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 19,
+      "instance_id": "robot_059",
+      "group_id": "pelvis"
+    },
+    {
+      "piece_id": "rmp_002",
+      "position": [
+        -5,
+        16,
+        2
+      ],
+      "rotation": 0,
+      "color_id": 11,
+      "instance_id": "robot_060",
+      "group_id": "pelvis_armor"
+    },
+    {
+      "piece_id": "rmp_002",
+      "position": [
+        3,
+        16,
+        2
+      ],
+      "rotation": 180,
+      "color_id": 11,
+      "instance_id": "robot_061",
+      "group_id": "pelvis_armor"
+    },
+    {
+      "piece_id": "arc_001",
+      "position": [
+        -1,
+        15,
+        2
+      ],
+      "rotation": 0,
+      "color_id": 19,
+      "instance_id": "robot_062",
+      "group_id": "pelvis_armor"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        -4,
+        17,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 19,
+      "instance_id": "robot_063",
+      "group_id": "torso"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        -2,
+        17,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 24,
+      "instance_id": "robot_064",
+      "group_id": "torso"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        0,
+        17,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 24,
+      "instance_id": "robot_065",
+      "group_id": "torso"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        2,
+        17,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 19,
+      "instance_id": "robot_066",
+      "group_id": "torso"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        -5,
+        19,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 8,
+      "instance_id": "robot_067",
+      "group_id": "chest"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        -3,
+        19,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 8,
+      "instance_id": "robot_068",
+      "group_id": "chest"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        -1,
+        19,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 24,
+      "instance_id": "robot_069",
+      "group_id": "chest"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        1,
+        19,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 8,
+      "instance_id": "robot_070",
+      "group_id": "chest"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        3,
+        19,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 8,
+      "instance_id": "robot_071",
+      "group_id": "chest"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        -5,
+        21,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 8,
+      "instance_id": "robot_072",
+      "group_id": "chest"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        -3,
+        21,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 8,
+      "instance_id": "robot_073",
+      "group_id": "chest"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        -1,
+        21,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 24,
+      "instance_id": "robot_074",
+      "group_id": "chest"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        1,
+        21,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 8,
+      "instance_id": "robot_075",
+      "group_id": "chest"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        3,
+        21,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 8,
+      "instance_id": "robot_076",
+      "group_id": "chest"
+    },
+    {
+      "piece_id": "arc_001",
+      "position": [
+        -1,
+        19,
+        2
+      ],
+      "rotation": 0,
+      "color_id": 11,
+      "instance_id": "robot_077",
+      "group_id": "chest_armor"
+    },
+    {
+      "piece_id": "arc_001",
+      "position": [
+        -1,
+        21,
+        2
+      ],
+      "rotation": 0,
+      "color_id": 24,
+      "instance_id": "robot_078",
+      "group_id": "chest_armor"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        -9,
+        21,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 19,
+      "instance_id": "robot_079",
+      "group_id": "left_shoulder"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        -9,
+        23,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 19,
+      "instance_id": "robot_080",
+      "group_id": "left_shoulder"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        -7,
+        21,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 24,
+      "instance_id": "robot_081",
+      "group_id": "left_shoulder"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        -7,
+        23,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 19,
+      "instance_id": "robot_082",
+      "group_id": "left_shoulder"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        5,
+        21,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 19,
+      "instance_id": "robot_083",
+      "group_id": "right_shoulder"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        5,
+        23,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 19,
+      "instance_id": "robot_084",
+      "group_id": "right_shoulder"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        7,
+        21,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 24,
+      "instance_id": "robot_085",
+      "group_id": "right_shoulder"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        7,
+        23,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 19,
+      "instance_id": "robot_086",
+      "group_id": "right_shoulder"
+    },
+    {
+      "piece_id": "arc_001",
+      "position": [
+        -9,
+        23,
+        2
+      ],
+      "rotation": 0,
+      "color_id": 11,
+      "instance_id": "robot_087",
+      "group_id": "left_shoulder_armor"
+    },
+    {
+      "piece_id": "arc_001",
+      "position": [
+        7,
+        23,
+        2
+      ],
+      "rotation": 180,
+      "color_id": 11,
+      "instance_id": "robot_088",
+      "group_id": "right_shoulder_armor"
+    },
+    {
+      "piece_id": "tal_001",
+      "position": [
+        -7,
+        21,
+        2
+      ],
+      "rotation": 0,
+      "color_id": 24,
+      "instance_id": "robot_089",
+      "group_id": "left_shoulder_armor"
+    },
+    {
+      "piece_id": "tal_001",
+      "position": [
+        6,
+        21,
+        2
+      ],
+      "rotation": 0,
+      "color_id": 24,
+      "instance_id": "robot_090",
+      "group_id": "right_shoulder_armor"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        -10,
+        17,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 8,
+      "instance_id": "robot_091",
+      "group_id": "left_upper_arm"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        -10,
+        19,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 24,
+      "instance_id": "robot_092",
+      "group_id": "left_upper_arm"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        -8,
+        17,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 8,
+      "instance_id": "robot_093",
+      "group_id": "left_upper_arm"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        -8,
+        19,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 24,
+      "instance_id": "robot_094",
+      "group_id": "left_upper_arm"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        6,
+        17,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 24,
+      "instance_id": "robot_095",
+      "group_id": "right_upper_arm"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        6,
+        19,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 24,
+      "instance_id": "robot_096",
+      "group_id": "right_upper_arm"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        8,
+        17,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 8,
+      "instance_id": "robot_097",
+      "group_id": "right_upper_arm"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        8,
+        19,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 24,
+      "instance_id": "robot_098",
+      "group_id": "right_upper_arm"
+    },
+    {
+      "piece_id": "arc_001",
+      "position": [
+        -10,
+        17,
+        2
+      ],
+      "rotation": 0,
+      "color_id": 8,
+      "instance_id": "robot_099",
+      "group_id": "left_elbow"
+    },
+    {
+      "piece_id": "arc_001",
+      "position": [
+        8,
+        17,
+        2
+      ],
+      "rotation": 180,
+      "color_id": 8,
+      "instance_id": "robot_100",
+      "group_id": "right_elbow"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        -12,
+        11,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 24,
+      "instance_id": "robot_101",
+      "group_id": "left_forearm"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        -12,
+        13,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 19,
+      "instance_id": "robot_102",
+      "group_id": "left_forearm"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        -12,
+        15,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 8,
+      "instance_id": "robot_103",
+      "group_id": "left_forearm"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        -12,
+        9,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 24,
+      "instance_id": "robot_104",
+      "group_id": "left_fist"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        -10,
+        11,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 24,
+      "instance_id": "robot_105",
+      "group_id": "left_forearm"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        -10,
+        13,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 19,
+      "instance_id": "robot_106",
+      "group_id": "left_forearm"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        -10,
+        15,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 8,
+      "instance_id": "robot_107",
+      "group_id": "left_forearm"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        -10,
+        9,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 24,
+      "instance_id": "robot_108",
+      "group_id": "left_fist"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        8,
+        11,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 24,
+      "instance_id": "robot_109",
+      "group_id": "right_forearm"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        8,
+        13,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 19,
+      "instance_id": "robot_110",
+      "group_id": "right_forearm"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        8,
+        15,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 8,
+      "instance_id": "robot_111",
+      "group_id": "right_forearm"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        8,
+        9,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 24,
+      "instance_id": "robot_112",
+      "group_id": "right_fist"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        10,
+        11,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 24,
+      "instance_id": "robot_113",
+      "group_id": "right_forearm"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        10,
+        13,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 19,
+      "instance_id": "robot_114",
+      "group_id": "right_forearm"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        10,
+        15,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 8,
+      "instance_id": "robot_115",
+      "group_id": "right_forearm"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        10,
+        9,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 24,
+      "instance_id": "robot_116",
+      "group_id": "right_fist"
+    },
+    {
+      "piece_id": "tal_001",
+      "position": [
+        -12,
+        12,
+        2
+      ],
+      "rotation": 0,
+      "color_id": 8,
+      "instance_id": "robot_117",
+      "group_id": "left_forearm_armor"
+    },
+    {
+      "piece_id": "tal_001",
+      "position": [
+        -10,
+        14,
+        2
+      ],
+      "rotation": 0,
+      "color_id": 21,
+      "instance_id": "robot_118",
+      "group_id": "left_forearm_armor"
+    },
+    {
+      "piece_id": "tal_001",
+      "position": [
+        11,
+        12,
+        2
+      ],
+      "rotation": 0,
+      "color_id": 8,
+      "instance_id": "robot_119",
+      "group_id": "right_forearm_armor"
+    },
+    {
+      "piece_id": "tal_001",
+      "position": [
+        9,
+        14,
+        2
+      ],
+      "rotation": 0,
+      "color_id": 21,
+      "instance_id": "robot_120",
+      "group_id": "right_forearm_armor"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        -2,
+        23,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 24,
+      "instance_id": "robot_121",
+      "group_id": "neck"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        0,
+        23,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 24,
+      "instance_id": "robot_122",
+      "group_id": "neck"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        -3,
+        25,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 19,
+      "instance_id": "robot_123",
+      "group_id": "head"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        -3,
+        27,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 20,
+      "instance_id": "robot_124",
+      "group_id": "head"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        -1,
+        25,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 19,
+      "instance_id": "robot_125",
+      "group_id": "head"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        -1,
+        27,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 20,
+      "instance_id": "robot_126",
+      "group_id": "head"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        1,
+        25,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 19,
+      "instance_id": "robot_127",
+      "group_id": "head"
+    },
+    {
+      "piece_id": "tal_006",
+      "position": [
+        1,
+        27,
+        0
+      ],
+      "rotation": 0,
+      "color_id": 20,
+      "instance_id": "robot_128",
+      "group_id": "head"
+    },
+    {
+      "piece_id": "arc_002",
+      "position": [
+        -2,
+        25,
+        2
+      ],
+      "rotation": 0,
+      "color_id": 24,
+      "instance_id": "robot_129",
+      "group_id": "face"
+    },
+    {
+      "piece_id": "blk_001",
+      "position": [
+        -2,
+        26,
+        3
+      ],
+      "rotation": 0,
+      "color_id": 11,
+      "instance_id": "robot_130",
+      "group_id": "left_eye"
+    },
+    {
+      "piece_id": "blk_001",
+      "position": [
+        0,
+        26,
+        3
+      ],
+      "rotation": 0,
+      "color_id": 11,
+      "instance_id": "robot_131",
+      "group_id": "right_eye"
+    },
+    {
+      "piece_id": "rmp_002",
+      "position": [
+        -2,
+        25,
+        3
+      ],
+      "rotation": 0,
+      "color_id": 20,
+      "instance_id": "robot_132",
+      "group_id": "mouth"
+    },
+    {
+      "piece_id": "tal_001",
+      "position": [
+        -3,
+        25,
+        2
+      ],
+      "rotation": 0,
+      "color_id": 8,
+      "instance_id": "robot_133",
+      "group_id": "left_ear"
+    },
+    {
+      "piece_id": "tal_001",
+      "position": [
+        2,
+        25,
+        2
+      ],
+      "rotation": 0,
+      "color_id": 8,
+      "instance_id": "robot_134",
+      "group_id": "right_ear"
+    },
+    {
+      "piece_id": "tal_001",
+      "position": [
+        -1,
+        28,
+        2
+      ],
+      "rotation": 0,
+      "color_id": 8,
+      "instance_id": "robot_135",
+      "group_id": "crest"
+    }
+  ]
+}

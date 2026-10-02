@@ -11,9 +11,6 @@ from .mesh import load_piece_mesh
 from .scene import Scene
 
 
-GRID_VIEW_RADIUS = 45
-
-
 VERTEX_SHADER = """
 #version 330
 uniform mat4 u_view_projection;
@@ -200,6 +197,16 @@ void main() {
 """
 
 
+GRID_PLANE_FRAGMENT_SHADER = """
+#version 330
+in vec3 v_color;
+out vec4 fragment_color;
+void main() {
+    fragment_color = vec4(v_color, 0.20);
+}
+"""
+
+
 PREVIEW_VERTEX_SHADER = """
 #version 330
 uniform mat4 u_view_projection;
@@ -272,6 +279,7 @@ class RayHit:
 class RenderPreview:
     instance: PieceInstance
     color: tuple[float, float, float, float]
+    companions: tuple[RenderPreview, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -335,6 +343,10 @@ class ModernGLSceneRenderer:
             vertex_shader=LINE_VERTEX_SHADER,
             fragment_shader=LINE_FRAGMENT_SHADER,
         )
+        self.grid_plane_program = self.context.program(
+            vertex_shader=LINE_VERTEX_SHADER,
+            fragment_shader=GRID_PLANE_FRAGMENT_SHADER,
+        )
         self.preview_program = self.context.program(
             vertex_shader=PREVIEW_VERTEX_SHADER,
             fragment_shader=PREVIEW_FRAGMENT_SHADER,
@@ -355,6 +367,10 @@ class ModernGLSceneRenderer:
         self.line_buffer: moderngl.Buffer | None = None
         self.line_vao: moderngl.VertexArray | None = None
         self.line_bounds: tuple[object, ...] | None = None
+        self.grid_plane_buffer: moderngl.Buffer | None = None
+        self.grid_plane_vao: moderngl.VertexArray | None = None
+        self.grid_plane_bounds: tuple[int, int, int] | None = None
+        self.grid_plane_line_count = 0
         self.viewport_size = (1, 1)
         self.qt_framebuffer: moderngl.Framebuffer | None = None
         self.qt_framebuffer_id: int | None = None
@@ -387,6 +403,7 @@ class ModernGLSceneRenderer:
         framebuffer_id: int,
         shading_mode: str = "pbr",
         preview: RenderPreview | None = None,
+        show_grid_plane: bool = False,
     ) -> None:
         batches = self._prepare_batches(scene, palette, selection)
         light_view_projection = light_view_projection_matrix(scene)
@@ -421,8 +438,12 @@ class ModernGLSceneRenderer:
             assert vao is not None
             vao.render(moderngl.TRIANGLES, instances=batch.instance_count)
 
+        if show_grid_plane:
+            self._render_grid_plane(scene, view_projection)
+
         if preview is not None:
-            self._render_preview(scene, preview, view_projection)
+            for item in (preview, *preview.companions):
+                self._render_preview(scene, item, view_projection)
 
         shadow_draws = len(batches) if shading_mode == "pbr" else 0
         self.stats = RenderStats(
@@ -430,8 +451,38 @@ class ModernGLSceneRenderer:
             cached_objects=len(batches),
             triangles=sum(batch.mesh.triangle_count * batch.instance_count for batch in batches),
             cached_triangles=sum(batch.mesh.triangle_count for batch in batches),
-            draw_calls=1 + len(batches) + shadow_draws + (1 if preview is not None else 0),
+            draw_calls=1 + len(batches) + shadow_draws + (2 if show_grid_plane else 0)
+            + (1 + len(preview.companions) if preview is not None else 0),
         )
+
+    def _render_grid_plane(self, scene: Scene, view_projection: np.ndarray) -> None:
+        if self.grid_plane_bounds != scene.bounds:
+            if self.grid_plane_vao is not None:
+                self.grid_plane_vao.release()
+            if self.grid_plane_buffer is not None:
+                self.grid_plane_buffer.release()
+            vertices = build_yz_grid_plane(scene)
+            self.grid_plane_buffer = self.context.buffer(vertices.tobytes())
+            self.grid_plane_vao = self.context.vertex_array(
+                self.grid_plane_program,
+                [(self.grid_plane_buffer, "3f 3f", "in_position", "in_color")],
+            )
+            self.grid_plane_line_count = len(vertices) - 6
+            self.grid_plane_bounds = scene.bounds
+        self.grid_plane_program["u_view_projection"].write(_gl_matrix(view_projection))
+        assert self.grid_plane_vao is not None
+        try:
+            self.context.disable(moderngl.CULL_FACE)
+            self.context.enable(moderngl.BLEND)
+            self.context.blend_func = (moderngl.SRC_ALPHA, moderngl.ONE_MINUS_SRC_ALPHA)
+            self.context.depth_mask = False
+            self.context.depth_func = "<="
+            self.grid_plane_vao.render(moderngl.TRIANGLES, vertices=6)
+            self.grid_plane_vao.render(moderngl.LINES, vertices=self.grid_plane_line_count, first=6)
+        finally:
+            self.context.depth_func = "<"
+            self.context.depth_mask = True
+            self.context.disable(moderngl.BLEND)
 
     def _render_preview(
         self,
@@ -516,6 +567,7 @@ class ModernGLSceneRenderer:
                     piece.piece_id,
                     piece.position,
                     piece.rotation,
+                    piece.rotation_x,
                     piece.color_id,
                 )
                 for piece in scene.pieces
@@ -610,6 +662,8 @@ class ModernGLSceneRenderer:
             return None
         point = origin + direction * distance
         x_cell, z_cell = math.floor(float(point[0])), math.floor(float(point[2]))
+        if not scene.contains_cell((x_cell, 0, z_cell)):
+            return None
         return RayHit(
             None,
             (x_cell, 0, z_cell),
@@ -683,18 +737,14 @@ class ModernGLSceneRenderer:
         )
 
     def _ensure_grid(self, scene: Scene) -> None:
-        center = (
-            math.floor(float(self.camera.target[0]) / 10.0) * 10,
-            math.floor(float(self.camera.target[2]) / 10.0) * 10,
-        )
-        signature = (*scene.bounds, *center)
+        signature = scene.bounds
         if self.line_bounds == signature and self.line_vao is not None:
             return
         if self.line_vao:
             self.line_vao.release()
         if self.line_buffer:
             self.line_buffer.release()
-        vertices = build_grid_lines(scene, center)
+        vertices = build_grid_lines(scene)
         self.line_buffer = self.context.buffer(vertices.tobytes())
         self.line_vao = self.context.vertex_array(
             self.line_program,
@@ -704,34 +754,34 @@ class ModernGLSceneRenderer:
 
 
 def model_matrix(piece: PieceInstance, definition: PieceDef) -> np.ndarray:
-    rotation = piece.rotation % 360
-    angle = math.radians(rotation)
-    cosine, sine = math.cos(angle), math.sin(angle)
-    pivot_x, _, pivot_z = definition.pivot  # type: ignore[misc]
-    matrix = np.eye(4, dtype=np.float32)
-    matrix[0, 0] = cosine
-    matrix[0, 2] = sine
-    matrix[2, 0] = -sine
-    matrix[2, 2] = cosine
-    matrix[0, 3] = piece.position[0] + pivot_x - (cosine * pivot_x + sine * pivot_z)
-    matrix[1, 3] = piece.position[1]
-    matrix[2, 3] = piece.position[2] + pivot_z - (-sine * pivot_x + cosine * pivot_z)
+    angle_y = math.radians(piece.rotation % 360)
+    angle_x = math.radians(piece.rotation_x % 360)
+    cos_y, sin_y = math.cos(angle_y), math.sin(angle_y)
+    cos_x, sin_x = math.cos(angle_x), math.sin(angle_x)
+    rotate_y = np.array(
+        ((cos_y, 0, sin_y, 0), (0, 1, 0, 0), (-sin_y, 0, cos_y, 0), (0, 0, 0, 1)),
+        dtype=np.float32,
+    )
+    rotate_x = np.array(
+        ((1, 0, 0, 0), (0, cos_x, -sin_x, 0), (0, sin_x, cos_x, 0), (0, 0, 0, 1)),
+        dtype=np.float32,
+    )
+    pivot = np.asarray((*definition.pivot, 1.0), dtype=np.float32)  # type: ignore[misc]
+    rotation = rotate_y @ rotate_x
+    matrix = rotation.copy()
+    matrix[:3, 3] = np.asarray(piece.position, dtype=np.float32) + pivot[:3] - (rotation @ pivot)[:3]
     return matrix
 
 
-def build_grid_lines(
-    scene: Scene,
-    center: tuple[int, int] = (0, 0),
-    radius: int = GRID_VIEW_RADIUS,
-) -> np.ndarray:
+def build_grid_lines(scene: Scene) -> np.ndarray:
     lines: list[tuple[float, float, float, float, float, float]] = []
 
     def add(a, b, color) -> None:
         lines.append((*a, *color))
         lines.append((*b, *color))
 
-    grid_min_x, grid_max_x = center[0] - radius, center[0] + radius
-    grid_min_z, grid_max_z = center[1] - radius, center[1] + radius
+    grid_min_x, grid_max_x = scene.min_x, scene.max_x
+    grid_min_z, grid_max_z = scene.min_z, scene.max_z
     add((0, 0, 0), (0, scene.bounds[1], 0), (0.28, 0.78, 0.4))
     floor_minor = (0.105, 0.12, 0.145)
     floor_major = (0.19, 0.22, 0.27)
@@ -742,7 +792,7 @@ def build_grid_lines(
         color = floor_major if x % 5 == 0 else floor_minor
         add((x, 0, grid_min_z), (x, 0, grid_max_z), color)
 
-    # Colored world axes and a subtle 30x30 Front-canvas reference border.
+    # World axes and the fixed construction boundary.
     add((grid_min_x, 0, 0), (grid_max_x, 0, 0), (0.78, 0.26, 0.28))
     add((0, 0, grid_min_z), (0, 0, grid_max_z), (0.28, 0.48, 0.92))
     border = (0.30, 0.34, 0.40)
@@ -751,6 +801,23 @@ def build_grid_lines(
     add((scene.max_x, 0.002, scene.max_z), (scene.min_x, 0.002, scene.max_z), border)
     add((scene.min_x, 0.002, scene.max_z), (scene.min_x, 0.002, scene.min_z), border)
     return np.asarray(lines, dtype=np.float32)
+
+
+def build_yz_grid_plane(scene: Scene) -> np.ndarray:
+    """Six fill vertices followed by grid-line pairs on world X=0."""
+    height = scene.bounds[1]
+    low, high = scene.min_z, scene.max_z
+    fill = (0.26, 0.42, 0.62)
+    corners = ((0, 0, low), (0, height, low), (0, height, high), (0, 0, high))
+    vertices = [(*corners[index], *fill) for index in (0, 1, 2, 0, 2, 3)]
+    minor, major = (0.43, 0.57, 0.72), (0.69, 0.80, 0.95)
+    for y in range(height + 1):
+        color = major if y % 5 == 0 or y == height else minor
+        vertices.extend(((0, y, low, *color), (0, y, high, *color)))
+    for z in range(low, high + 1):
+        color = major if z % 5 == 0 or z in (low, high) else minor
+        vertices.extend(((0, 0, z, *color), (0, height, z, *color)))
+    return np.asarray(vertices, dtype=np.float32)
 
 
 def perspective_matrix(fov_degrees: float, aspect: float, near: float, far: float) -> np.ndarray:

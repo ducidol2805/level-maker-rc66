@@ -238,6 +238,25 @@ def test_toolbox_buttons_fit_panel_in_requested_rows() -> None:
     app.processEvents()
 
 
+def test_edit_menu_exposes_y_and_x_rotation_shortcuts() -> None:
+    from piece_editor.ui import MainWindow
+
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow("library", persist_ui_state=False)
+    shortcuts = {
+        action.text(): action.shortcut().toString()
+        for action in window.menuBar().actions()[1].menu().actions()
+        if action.shortcut().toString()
+    }
+
+    assert shortcuts["Rotate Y +45°"] == "R"
+    assert shortcuts["Rotate Y -45°"] == "Shift+R"
+    assert shortcuts["Rotate X +45°"] == "Alt+R"
+    assert shortcuts["Rotate X -45°"] == "Alt+Shift+R"
+    window.deleteLater()
+    app.processEvents()
+
+
 def test_front_and_3d_are_separate_hideable_center_panels() -> None:
     from piece_editor.ui import MainWindow
 
@@ -265,7 +284,7 @@ def test_front_and_3d_are_separate_hideable_center_panels() -> None:
     app.processEvents()
 
 
-def test_front_layer_buttons_run_top_to_bottom_from_minus_fifteen_to_fourteen() -> None:
+def test_front_layer_buttons_run_top_to_bottom_from_minus_twenty_five_to_twenty_four() -> None:
     from piece_editor.ui import MainWindow
 
     app = QApplication.instance() or QApplication([])
@@ -276,21 +295,21 @@ def test_front_layer_buttons_run_top_to_bottom_from_minus_fifteen_to_fourteen() 
     selector = window.front_panel.layer_selector
 
     assert selector is not None
-    assert (selector.minimum, selector.maximum, selector.value) == (-15, 14, 0)
-    assert selector.layers == tuple(range(-15, 15))
-    assert selector.layout().indexOf(selector.buttons[-15]) == 0
-    assert selector.layout().indexOf(selector.buttons[14]) == 29
-    assert selector.buttons[-15].y() < selector.buttons[14].y()
+    assert (selector.minimum, selector.maximum, selector.value) == (-25, 24, 0)
+    assert selector.layers == tuple(range(-25, 25))
+    assert selector.layout().indexOf(selector.buttons[-25]) == 0
+    assert selector.layout().indexOf(selector.buttons[24]) == 49
+    assert selector.buttons[-25].y() < selector.buttons[24].y()
     assert selector.buttons[0].isChecked()
     assert window.front_viewport.current_layer == 0
 
-    QTest.mouseClick(selector.buttons[-15], Qt.MouseButton.LeftButton)
-    assert selector.value == -15
-    assert window.front_viewport.current_layer == -15
+    QTest.mouseClick(selector.buttons[-25], Qt.MouseButton.LeftButton)
+    assert selector.value == -25
+    assert window.front_viewport.current_layer == -25
 
-    QTest.mouseClick(selector.buttons[14], Qt.MouseButton.LeftButton)
-    assert selector.value == 14
-    assert window.front_viewport.current_layer == 14
+    QTest.mouseClick(selector.buttons[24], Qt.MouseButton.LeftButton)
+    assert selector.value == 24
+    assert window.front_viewport.current_layer == 24
 
     QTest.mouseClick(selector.buttons[0], Qt.MouseButton.LeftButton)
     assert selector.value == 0
@@ -421,8 +440,8 @@ def test_ai_controls_cannot_exceed_canvas_size_and_scale_sets_width(tmp_path) ->
     Image.new("RGB", (96, 40), "red").save(image_path)
     panel.drop.set_path(str(image_path))
 
-    assert panel.width.maximum() == 30
-    assert panel.height.maximum() == 30
+    assert panel.width.maximum() == 50
+    assert panel.height.maximum() == 50
     assert panel.scale.value() == 4
     assert panel.width.value() == 24
     panel.scale.setValue(8)

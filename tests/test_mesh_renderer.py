@@ -8,7 +8,6 @@ from piece_editor.domain import PieceDef, PieceInstance
 from piece_editor.library import PieceLibrary
 from piece_editor.mesh import load_piece_mesh
 from piece_editor.renderer3d import (
-    GRID_VIEW_RADIUS,
     Camera3D,
     ModernGLSceneRenderer,
     build_grid_lines,
@@ -77,6 +76,42 @@ def test_diagonal_model_matrix_is_shifted_into_positive_local_footprint() -> Non
     assert np.allclose((model_matrix(piece, definition) @ local_pivot)[:3], (-2.5, 4.5, 2.5))
 
 
+def test_x_rotation_matrix_matches_scene_occupancy_and_keeps_pivot_fixed() -> None:
+    definition = PieceDef("tall", (1, 2, 1))
+    piece = PieceInstance("tall", (3, 4, 5), 0, 0, rotation_x=90)
+    local_corners = np.array(
+        [(x, y, z, 1) for x in (0, 1) for y in (0, 2) for z in (0, 1)],
+        dtype=np.float32,
+    )
+
+    world = (model_matrix(piece, definition) @ local_corners.T).T[:, :3]
+    offset, size = definition.rotated_bounds_3d(piece.rotation, piece.rotation_x)
+    bounds_min = np.asarray(piece.position) + np.asarray(offset)
+    bounds_max = bounds_min + np.asarray(size)
+
+    assert np.allclose(world.min(axis=0), bounds_min)
+    assert np.allclose(world.max(axis=0), bounds_max)
+    pivot = np.asarray((*definition.pivot, 1), dtype=np.float32)
+    assert np.allclose((model_matrix(piece, definition) @ pivot)[:3], np.asarray(piece.position) + pivot[:3])
+
+
+def test_combined_xy_model_bounds_match_every_grid_footprint() -> None:
+    definition = PieceDef("shape", (2, 3, 1))
+    local_corners = np.array(
+        [(x, y, z, 1) for x in (0, 2) for y in (0, 3) for z in (0, 1)],
+        dtype=np.float32,
+    )
+    for rotation_y in range(0, 360, 45):
+        for rotation_x in range(0, 360, 45):
+            piece = PieceInstance("shape", (4, 6, 8), rotation_y, 0, rotation_x=rotation_x)
+            world = (model_matrix(piece, definition) @ local_corners.T).T[:, :3]
+            offset, size = definition.rotated_bounds_3d(rotation_y, rotation_x)
+            bounds_min = np.asarray(piece.position) + np.asarray(offset)
+            bounds_max = bounds_min + np.asarray(size)
+            assert np.all(world.min(axis=0) >= bounds_min - 1e-6)
+            assert np.all(world.max(axis=0) <= bounds_max + 1e-6)
+
+
 def test_3d_grid_contains_finite_colored_line_vertices() -> None:
     scene = Scene({"cube": PieceDef("cube", (1, 1, 1))})
 
@@ -85,29 +120,29 @@ def test_3d_grid_contains_finite_colored_line_vertices() -> None:
     assert vertices.ndim == 2 and vertices.shape[1] == 6
     assert vertices.shape[0] % 2 == 0
     assert np.all(np.isfinite(vertices))
-    assert vertices[:, 0].min() == -GRID_VIEW_RADIUS
-    assert vertices[:, 0].max() == GRID_VIEW_RADIUS
-    assert vertices[:, 2].min() == -GRID_VIEW_RADIUS
-    assert vertices[:, 2].max() == GRID_VIEW_RADIUS
+    assert vertices[:, 0].min() == scene.min_x
+    assert vertices[:, 0].max() == scene.max_x
+    assert vertices[:, 2].min() == scene.min_z
+    assert vertices[:, 2].max() == scene.max_z
     segments = vertices.reshape(-1, 2, 6)
     depth_lines = {
         int(start[2])
         for start, end in segments
         if start[1] == end[1] == 0
-        and start[0] == -GRID_VIEW_RADIUS
-        and end[0] == GRID_VIEW_RADIUS
+        and start[0] == scene.min_x
+        and end[0] == scene.max_x
         and start[2] == end[2]
     }
     x_lines = {
         int(start[0])
         for start, end in segments
         if start[1] == end[1] == 0
-        and start[2] == -GRID_VIEW_RADIUS
-        and end[2] == GRID_VIEW_RADIUS
+        and start[2] == scene.min_z
+        and end[2] == scene.max_z
         and start[0] == end[0]
     }
-    assert depth_lines == set(range(-GRID_VIEW_RADIUS, GRID_VIEW_RADIUS + 1))
-    assert x_lines == set(range(-GRID_VIEW_RADIUS, GRID_VIEW_RADIUS + 1))
+    assert depth_lines == set(range(scene.min_z, scene.max_z + 1))
+    assert x_lines == set(range(scene.min_x, scene.max_x + 1))
     border_segments = [
         (start, end)
         for start, end in segments

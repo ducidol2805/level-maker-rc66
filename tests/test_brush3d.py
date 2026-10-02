@@ -5,6 +5,7 @@ import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np
+import pytest
 from PySide6.QtCore import QEvent, QPoint, QPointF, Qt
 from PySide6.QtGui import QKeyEvent, QMouseEvent
 from PySide6.QtWidgets import QApplication
@@ -57,22 +58,22 @@ def test_grid_raycast_uses_occupancy_lookup_with_4000_pieces() -> None:
     assert scene.piece_by_id(hit.instance_id or "") is scene.piece_at(hit.cell)
 
 
-def test_grid_raycast_finds_piece_outside_thirty_cell_reference_frame() -> None:
-    piece = PieceInstance("cube", (80, 1, -70), 0, 0)
+def test_grid_raycast_finds_piece_at_scene_corner_from_outside_camera() -> None:
+    piece = PieceInstance("cube", (24, 1, -25), 0, 0)
     scene = Scene({"cube": PieceDef("cube", (1, 1, 1))}, pieces=[piece])
 
     hit = _grid_raycast(
-        np.asarray((70.0, 1.5, -69.5), dtype=np.float32),
-        np.asarray((1.0, 0.0, 0.0), dtype=np.float32),
+        np.asarray((80.0, 1.5, -24.5), dtype=np.float32),
+        np.asarray((-1.0, 0.0, 0.0), dtype=np.float32),
         scene,
     )
 
     assert hit is not None
     assert hit.instance_id == piece.instance_id
-    assert hit.cell == (80, 1, -70)
+    assert hit.cell == (24, 1, -25)
 
 
-def test_raycast_falls_back_to_unbounded_y_zero_ground() -> None:
+def test_ground_raycast_is_clipped_to_scene_edges() -> None:
     renderer = ModernGLSceneRenderer.__new__(ModernGLSceneRenderer)
     renderer.screen_ray = lambda _x, _y: (  # type: ignore[method-assign]
         np.asarray((2.25, 5.0, -3.25), dtype=np.float32),
@@ -88,13 +89,17 @@ def test_raycast_falls_back_to_unbounded_y_zero_ground() -> None:
     assert hit.cell == (2, 0, -4)
     assert hit.normal == (0, 1, 0)
 
-    renderer.screen_ray = lambda _x, _y: (  # type: ignore[method-assign]
-        np.asarray((125.25, 5.0, -203.25), dtype=np.float32),
-        np.asarray((0.0, -1.0, 0.0), dtype=np.float32),
-    )
-    outside_hit = renderer.raycast_grid(10.0, 20.0, scene)
-    assert outside_hit is not None
-    assert outside_hit.cell == (125, 0, -204)
+    for x, z, inside in (
+        (-25.0, -25.0, True), (24.999, 24.999, True),
+        (-25.001, 0.0, False), (25.0, 0.0, False),
+        (0.0, -25.001, False), (0.0, 25.0, False),
+        (125.25, -203.25, False),
+    ):
+        renderer.screen_ray = lambda _x, _y: (  # type: ignore[method-assign]
+            np.asarray((x, 5.0, z), dtype=np.float32),
+            np.asarray((0.0, -1.0, 0.0), dtype=np.float32),
+        )
+        assert (renderer.raycast_grid(10.0, 20.0, scene) is not None) == inside
 
 
 def test_screen_rays_support_perspective_ortho_and_iso_projection() -> None:
@@ -173,7 +178,7 @@ def test_shared_document_records_whole_3d_stroke_as_one_undo_step() -> None:
     app.processEvents()
 
 
-def test_3d_attach_can_place_outside_reference_frame_while_front_place_cannot() -> None:
+def test_3d_and_front_both_reject_painting_outside_frame() -> None:
     app = QApplication.instance() or QApplication([])
     scene = Scene({"cube": PieceDef("cube", (1, 1, 1))})
     document = EditorDocument(scene, DEFAULT_PALETTE[0].id)
@@ -182,13 +187,86 @@ def test_3d_attach_can_place_outside_reference_frame_while_front_place_cannot() 
     view3d.brush_stroke3d = BrushStroke3D(EditorTool.PLACE, (0, 1, 0), 0.0)
 
     view3d._apply_3d_cells(((80, 0, -70),))
-    assert scene.piece_at((80, 0, -70)) is not None
+    assert scene.pieces == []
+    assert not document.undo()
 
     front = EditorViewport(document, DEFAULT_PALETTE, allow_3d=False)
     front._place((scene.max_x, 0))
     assert scene.piece_at((scene.max_x, 0, front.current_layer)) is None
     front.deleteLater()
     view3d.deleteLater()
+    app.processEvents()
+
+
+def test_drag_crossing_border_places_only_inside_cells_and_undoes_once() -> None:
+    app = QApplication.instance() or QApplication([])
+    scene = Scene({"cube": PieceDef("cube", (1, 1, 1))})
+    document = EditorDocument(scene)
+    viewport = EditorViewport(document, DEFAULT_PALETTE)
+    viewport.brush_stroke3d = BrushStroke3D(EditorTool.PLACE, (0, 1, 0), 0.0)
+    document.begin_stroke()
+    viewport._apply_3d_cells(grid_line_on_plane((23, 0, 24), (30, 0, 24), (0, 1, 0)))
+    document.end_stroke()
+    assert {p.position for p in scene.pieces} == {(23, 0, 24), (24, 0, 24)}
+    assert document.undo()
+    assert scene.pieces == []
+    assert not document.undo()
+    assert document.redo()
+    assert len(scene.pieces) == 2
+    viewport.deleteLater()
+    app.processEvents()
+
+
+def test_multi_cell_brush_overhanging_border_shows_red_and_cannot_place() -> None:
+    app = QApplication.instance() or QApplication([])
+    scene = Scene({"bar": PieceDef("bar", (2, 1, 1))})
+    viewport = EditorViewport(scene, DEFAULT_PALETTE)
+    hit = RayHit(None, (24, 0, 0), (0, 1, 0), (24.5, 0.0, 0.5), 1.0, True)
+    preview = viewport._preview_for_hit(hit, EditorTool.PLACE)
+    assert preview is not None
+    assert preview.color == (0.95, 0.12, 0.12, 0.58)
+    viewport.brush_stroke3d = BrushStroke3D(EditorTool.PLACE, (0, 1, 0), 0.0)
+    viewport._apply_3d_cells((hit.cell,))
+    assert scene.pieces == []
+    viewport.deleteLater()
+    app.processEvents()
+
+
+@pytest.mark.parametrize("projection", ["perspective", "orthographic", "iso"])
+def test_pan_outside_then_click_does_not_create_piece(projection) -> None:
+    app = QApplication.instance() or QApplication([])
+    scene = Scene({"cube": PieceDef("cube", (1, 1, 1))})
+    viewport = EditorViewport(scene, DEFAULT_PALETTE)
+    viewport.resize(800, 600)
+    renderer = ModernGLSceneRenderer.__new__(ModernGLSceneRenderer)
+    renderer.camera = Camera3D()
+    renderer.camera.target = np.zeros(3, dtype=np.float32)
+    renderer.camera.pitch = 60.0
+    renderer.viewport_size = (800, 600)
+    # Exercise real camera/raycast math without requiring a GPU context.
+    renderer.resize = lambda *_args: None
+    viewport.renderer3d = renderer
+    viewport.set_view_mode(ViewMode.PERSPECTIVE)
+    viewport.set_projection_mode(projection)
+    assert viewport._raycast_3d(QPoint(400, 300), True) is not None
+
+    def send(event_type, position, button, buttons):
+        point = QPointF(*position)
+        QApplication.sendEvent(viewport, QMouseEvent(
+            event_type, point, point, point, button, buttons, Qt.KeyboardModifier.NoModifier,
+        ))
+
+    send(QEvent.Type.MouseButtonPress, (400, 300), Qt.MouseButton.MiddleButton, Qt.MouseButton.MiddleButton)
+    send(QEvent.Type.MouseMove, (4400, 300), Qt.MouseButton.NoButton, Qt.MouseButton.MiddleButton)
+    send(QEvent.Type.MouseButtonRelease, (4400, 300), Qt.MouseButton.MiddleButton, Qt.MouseButton.NoButton)
+    assert max(abs(renderer.camera.target[0]), abs(renderer.camera.target[2])) > 25
+    assert viewport._raycast_3d(QPoint(400, 300), True) is None
+    send(QEvent.Type.MouseButtonPress, (400, 300), Qt.MouseButton.LeftButton, Qt.MouseButton.LeftButton)
+    send(QEvent.Type.MouseButtonRelease, (400, 300), Qt.MouseButton.LeftButton, Qt.MouseButton.NoButton)
+    assert scene.pieces == []
+    assert viewport.render_preview3d is None
+    assert not viewport.document.undo()
+    viewport.deleteLater()
     app.processEvents()
 
 
@@ -201,7 +279,7 @@ def test_invalid_attach_stroke_is_skipped_without_empty_undo_checkpoint() -> Non
     viewport.brush_stroke3d = BrushStroke3D(EditorTool.PLACE, (0, 1, 0), 0.0)
     document.begin_stroke()
 
-    viewport._apply_3d_cells(((0, 0, 0), (0, scene.bounds[1], 0)))
+    viewport._apply_3d_cells(((scene.max_x, 0, 0), (0, scene.bounds[1], 0)))
     document.end_stroke()
 
     assert scene.pieces == [existing]
@@ -295,6 +373,28 @@ def test_rotated_ghost_rotation_is_used_for_3d_placement() -> None:
     app.processEvents()
 
 
+def test_alt_r_rotates_ghost_and_placed_piece_around_x() -> None:
+    app = QApplication.instance() or QApplication([])
+    definition = PieceDef("tall", (1, 2, 1))
+    scene = Scene({"tall": definition})
+    viewport = EditorViewport(scene, DEFAULT_PALETTE)
+
+    viewport.keyPressEvent(
+        QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_R, Qt.KeyboardModifier.AltModifier)
+    )
+    candidate = viewport._candidate_for_target((0, 2, 0), (0, 1, 0))
+    assert viewport.active_rotation == 0
+    assert viewport.active_rotation_x == 45
+    assert candidate is not None and candidate.rotation_x == 45
+    viewport.brush_stroke3d = BrushStroke3D(EditorTool.PLACE, (0, 1, 0), 2.0)
+    viewport._apply_3d_cells(((0, 2, 0),))
+    assert len(scene.pieces) == 1
+    assert scene.pieces[0].rotation == 0
+    assert scene.pieces[0].rotation_x == 45
+    viewport.deleteLater()
+    app.processEvents()
+
+
 def test_viewport_scales_raycast_coordinates_for_high_dpi() -> None:
     class HiDpiViewport(EditorViewport):
         def devicePixelRatioF(self) -> float:  # noqa: N802
@@ -328,7 +428,7 @@ def test_viewport_scales_raycast_coordinates_for_high_dpi() -> None:
 
 def test_editor_shortcuts_switch_shared_tool_state_and_rotate_selection() -> None:
     app = QApplication.instance() or QApplication([])
-    cube = PieceInstance("cube", (0, 0, 0), 0, 0)
+    cube = PieceInstance("cube", (0, 2, 0), 0, 0)
     viewport = EditorViewport(Scene({"cube": PieceDef("cube", (1, 1, 1))}, pieces=[cube]), DEFAULT_PALETTE)
     shortcuts = (
         (Qt.Key.Key_B, EditorTool.PLACE),
@@ -345,6 +445,16 @@ def test_editor_shortcuts_switch_shared_tool_state_and_rotate_selection() -> Non
     assert viewport.selected_pieces()[0].rotation == 45
     viewport.keyPressEvent(QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_R, Qt.KeyboardModifier.ShiftModifier))
     assert viewport.selected_pieces()[0].rotation == 0
+    viewport.keyPressEvent(QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_R, Qt.KeyboardModifier.AltModifier))
+    assert viewport.selected_pieces()[0].rotation_x == 45
+    viewport.keyPressEvent(
+        QKeyEvent(
+            QEvent.Type.KeyPress,
+            Qt.Key.Key_R,
+            Qt.KeyboardModifier.AltModifier | Qt.KeyboardModifier.ShiftModifier,
+        )
+    )
+    assert viewport.selected_pieces()[0].rotation_x == 0
     assert viewport._effective_3d_tool(Qt.KeyboardModifier.ShiftModifier) == EditorTool.PAINT
     viewport.set_tool(EditorTool.PLACE)
     assert viewport._effective_3d_tool(Qt.KeyboardModifier.ShiftModifier) == EditorTool.ERASE
@@ -436,7 +546,7 @@ def test_3d_box_select_can_select_through_or_only_visible_pieces() -> None:
     app.processEvents()
 
 
-def test_move_shortcut_rejects_entire_selection_when_any_piece_would_collide() -> None:
+def test_move_shortcut_allows_overlapping_pieces_and_undoes_together() -> None:
     app = QApplication.instance() or QApplication([])
     first = PieceInstance("cube", (0, 0, 0), 0, 0)
     second = PieceInstance("cube", (1, 0, 0), 0, 0)
@@ -449,6 +559,9 @@ def test_move_shortcut_rejects_entire_selection_when_any_piece_would_collide() -
 
     viewport.keyPressEvent(QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Right, Qt.KeyboardModifier.NoModifier))
 
+    assert [piece.position for piece in viewport.selected_pieces()] == [(1, 0, 0), (2, 0, 0)]
+    assert len(viewport.scene.pieces) == 3
+    viewport.undo()
     assert [piece.position for piece in viewport.selected_pieces()] == [(0, 0, 0), (1, 0, 0)]
     viewport.deleteLater()
     app.processEvents()

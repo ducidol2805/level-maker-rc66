@@ -44,7 +44,7 @@ def test_bundled_library_pivots_follow_grid_box_rule() -> None:
 
 def test_project_round_trip_and_minimal_game_export(tmp_path) -> None:
     definition = PieceDef("cube", (1, 1, 1))
-    piece = PieceInstance("cube", (2, 3, 0), 90, 4, "head")
+    piece = PieceInstance("cube", (2, 3, 0), 90, 4, "head", rotation_x=45)
     scene = Scene({"cube": definition}, pieces=[piece])
     project_path = tmp_path / "model.piece-project.json"
     game_path = tmp_path / "model.json"
@@ -55,7 +55,21 @@ def test_project_round_trip_and_minimal_game_export(tmp_path) -> None:
     project = load_project_data(project_path)
     game = json.loads(game_path.read_text(encoding="utf-8"))
     assert project["pieces"][0]["group_id"] == "head"
-    assert game == {"pieces": [{"id": "cube", "pos": [2, 3, 0], "rot": 90, "color": 4}]}
+    assert project["pieces"][0]["rotation_x"] == 45
+    assert game == {
+        "pieces": [{"id": "cube", "pos": [2, 3, 0], "rot": 90, "rot_x": 45, "color": 4}]
+    }
+    assert PieceInstance.from_dict(game["pieces"][0]).rotation_x == 45
+
+
+def test_legacy_piece_data_defaults_x_rotation_to_zero() -> None:
+    project_piece = PieceInstance.from_dict(
+        {"piece_id": "cube", "position": [0, 0, 0], "rotation": 90, "color_id": 1}
+    )
+    game_piece = PieceInstance.from_dict({"id": "cube", "pos": [0, 0, 0], "rot": 90, "color": 1})
+
+    assert project_piece.rotation_x == 0
+    assert game_piece.rotation_x == 0
 
 
 def test_palette_image_preserves_pixel_order_and_skips_duplicates(tmp_path) -> None:
