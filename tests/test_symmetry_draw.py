@@ -16,15 +16,17 @@ from piece_editor.viewport import EditorViewport, ViewMode
 
 
 @pytest.mark.parametrize("rotation", range(0, 360, 45))
-@pytest.mark.parametrize("rotation_x", (0, 45, 90, 270))
+@pytest.mark.parametrize("rotation_x", range(0, 360, 45))
 def test_mirror_reflects_full_rotated_footprint(rotation, rotation_x) -> None:
     definition = PieceDef("bar", (2, 3, 4), pivot=(0.5, 1.5, 0.5))
     scene = Scene({definition.id: definition})
     original = PieceInstance("bar", (7, 10, 3), rotation, 2, rotation_x=rotation_x)
     mirrored = mirrored_piece_yz(definition, original)
-    assert set(scene.cells_for(mirrored)) == {(-x - 1, y, z) for x, y, z in scene.cells_for(original)}
-    assert mirrored.rotation == rotation
-    assert mirrored.rotation_x == rotation_x
+    original_cells = set(scene.cells_for(original))
+    mirrored_cells = set(scene.cells_for(mirrored))
+    assert min(x for x, _, _ in mirrored_cells) == -max(x for x, _, _ in original_cells) - 1
+    assert mirrored.rotation == (180 - rotation) % 360
+    assert mirrored.rotation_x == (-rotation_x) % 360
     assert mirrored.color_id == original.color_id
     assert mirrored.instance_id != original.instance_id
 

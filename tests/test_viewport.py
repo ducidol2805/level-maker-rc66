@@ -98,10 +98,33 @@ def test_palette_uses_eight_columns_and_four_rows() -> None:
     assert max(row for row, _ in positions) == 3
     assert max(column for _, column in positions) == 7
     assert all(
-        button.sizePolicy().horizontalPolicy() == QSizePolicy.Policy.Expanding
-        and button.sizePolicy().verticalPolicy() == QSizePolicy.Policy.Expanding
+        button.sizePolicy().horizontalPolicy() == QSizePolicy.Policy.Fixed
+        and button.sizePolicy().verticalPolicy() == QSizePolicy.Policy.Fixed
         for button in panel.buttons.values()
     )
+    panel.deleteLater()
+    app.processEvents()
+
+
+def test_palette_column_slider_keeps_square_swatches_and_clips_extra_rows() -> None:
+    from piece_editor.ui import PalettePanel
+
+    app = QApplication.instance() or QApplication([])
+    panel = PalettePanel(DEFAULT_PALETTE)
+    panel.resize(250, 120)
+    panel.show()
+    app.processEvents()
+
+    panel.columns_slider.setValue(panel.COLUMN_OPTIONS.index(4))
+    app.processEvents()
+
+    positions = [panel.grid.getItemPosition(index)[:2] for index in range(panel.grid.count())]
+    assert panel.columns == 4
+    assert panel.columns_label.text() == "4"
+    assert positions == [(index // 4, index % 4) for index in range(32)]
+    assert all(button.width() == button.height() for button in panel.buttons.values())
+    assert panel.grid_content.height() > panel.palette_clip.height()
+    panel.close()
     panel.deleteLater()
     app.processEvents()
 
@@ -117,6 +140,26 @@ def test_toolbox_palette_and_library_use_resizable_vertical_splitter() -> None:
     assert window.left_splitter.widget(1) is window.palette_panel
     assert window.left_splitter.widget(2) is window.library_panel
     assert not window.left_splitter.childrenCollapsible()
+    window.close()
+    window.deleteLater()
+    app.processEvents()
+
+
+def test_main_window_can_switch_to_second_palette() -> None:
+    from piece_editor.ui import MainWindow
+
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow("library", persist_ui_state=False)
+
+    window.palette_actions["palette_2"].trigger()
+
+    assert window.palette_key == "palette_2"
+    assert len(window.palette) == 64
+    assert window.palette_panel.grid.count() == 64
+    assert window.front_viewport.palette is window.palette
+    assert window.view3d.palette is window.palette
+    assert window.ai_panel.palette_size.maximum() == 64
+    window.dirty = False
     window.close()
     window.deleteLater()
     app.processEvents()

@@ -8,6 +8,7 @@ a = Analysis(
     datas=[
         ("app_icon.png", "."),
         ("Palette.png", "."),
+        ("Palette2.png", "."),
         ("Endesga 32 Palette color palette.txt", "."),
         ("library", "library"),
         ("models", "models"),

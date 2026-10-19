@@ -260,19 +260,32 @@ def reorder_palette(
     )
 
 
-def load_default_palette() -> tuple[PaletteColor, ...]:
-    palette_path = Path(__file__).resolve().parent.parent / "Palette.png"
+PALETTE_FILES = {
+    "palette_1": "Palette.png",
+    "palette_2": "Palette2.png",
+}
+
+
+def load_app_palette(palette_key: str = "palette_1") -> tuple[PaletteColor, ...]:
+    filename = PALETTE_FILES.get(palette_key, PALETTE_FILES["palette_1"])
+    palette_path = Path(__file__).resolve().parent.parent / filename
     try:
         palette = load_palette_image(palette_path)
     except (OSError, ValueError):
         return FALLBACK_PALETTE
     order_path = palette_path.parent / "Endesga 32 Palette color palette.txt"
+    if palette_key != "palette_1":
+        return palette
     if order_path.exists():
         try:
             return reorder_palette(palette, load_palette_order(order_path))
         except (OSError, ValueError):
             return palette
     return palette
+
+
+def load_default_palette() -> tuple[PaletteColor, ...]:
+    return load_app_palette("palette_1")
 
 
 DEFAULT_PALETTE = load_default_palette()

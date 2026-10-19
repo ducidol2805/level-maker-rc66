@@ -123,7 +123,7 @@ def test_3d_grid_contains_finite_colored_line_vertices() -> None:
     assert vertices[:, 0].min() == scene.min_x
     assert vertices[:, 0].max() == scene.max_x
     assert vertices[:, 2].min() == scene.min_z
-    assert vertices[:, 2].max() == scene.max_z
+    assert vertices[:, 2].max() == 34
     segments = vertices.reshape(-1, 2, 6)
     depth_lines = {
         int(start[2])
@@ -155,6 +155,15 @@ def test_3d_grid_contains_finite_colored_line_vertices() -> None:
         (scene.max_x, scene.min_z),
         (scene.max_x, scene.max_z),
     }
+    arrow_segments = [
+        (start, end)
+        for start, end in segments
+        if np.isclose(start[1], -0.05) and np.isclose(end[1], -0.05)
+    ]
+    assert len(arrow_segments) == 4
+    assert tuple(arrow_segments[0][0][:3]) == (0.0, -0.05, 34.0)
+    assert tuple(arrow_segments[0][1][:3]) == (0.0, -0.05, 26.0)
+    assert all(np.allclose(np.asarray(segment)[:, 3:], (1.0, 0.55, 0.08)) for segment in arrow_segments)
 
 
 def test_orbit_uses_reduced_sensitivity() -> None:

@@ -21,21 +21,28 @@ class BrushStroke3D:
 
 
 def mirrored_piece_yz(definition: PieceDef, piece: PieceInstance) -> PieceInstance:
-    """Reflect the occupied box across world X=0, preserving brush orientation."""
-    rotation = piece.rotation
-    offset, size = definition.rotated_bounds_3d(piece.rotation, piece.rotation_x)
+    """Reflect the occupied box and yaw across world X=0."""
+    rotation = (180 - piece.rotation) % 360
+    if rotation not in definition.allowed_rotations:
+        rotation = piece.rotation
+    rotation_x = (-piece.rotation_x) % 360
+    if rotation_x not in definition.allowed_rotations:
+        rotation_x = piece.rotation_x
+    old_offset, old_size = definition.rotated_bounds_3d(piece.rotation, piece.rotation_x)
+    new_offset, _ = definition.rotated_bounds_3d(rotation, rotation_x)
     x, y, z = piece.position
+    mirrored_left = -(x + old_offset[0] + old_size[0])
     return PieceInstance(
         piece.piece_id,
         (
-            -(x + offset[0] + size[0]) - offset[0],
+            mirrored_left - new_offset[0],
             y,
             z,
         ),
         rotation,
         piece.color_id,
         group_id=piece.group_id,
-        rotation_x=piece.rotation_x,
+        rotation_x=rotation_x,
     )
 
 

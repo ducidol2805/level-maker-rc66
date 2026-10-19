@@ -438,12 +438,16 @@ class ModernGLSceneRenderer:
             assert vao is not None
             vao.render(moderngl.TRIANGLES, instances=batch.instance_count)
 
+        preview_items = (preview, *preview.companions) if preview is not None else ()
         if show_grid_plane:
+            # Reserve ghost pixels in the depth buffer first, so the translucent
+            # symmetry plane cannot bleed through and hide the brush preview.
+            for item in preview_items:
+                self._render_preview(scene, item, view_projection, depth_only=True)
             self._render_grid_plane(scene, view_projection)
 
-        if preview is not None:
-            for item in (preview, *preview.companions):
-                self._render_preview(scene, item, view_projection)
+        for item in preview_items:
+            self._render_preview(scene, item, view_projection)
 
         shadow_draws = len(batches) if shading_mode == "pbr" else 0
         self.stats = RenderStats(
@@ -451,8 +455,12 @@ class ModernGLSceneRenderer:
             cached_objects=len(batches),
             triangles=sum(batch.mesh.triangle_count * batch.instance_count for batch in batches),
             cached_triangles=sum(batch.mesh.triangle_count for batch in batches),
-            draw_calls=1 + len(batches) + shadow_draws + (2 if show_grid_plane else 0)
-            + (1 + len(preview.companions) if preview is not None else 0),
+            draw_calls=1
+            + len(batches)
+            + shadow_draws
+            + (2 if show_grid_plane else 0)
+            + len(preview_items)
+            + (len(preview_items) if show_grid_plane else 0),
         )
 
     def _render_grid_plane(self, scene: Scene, view_projection: np.ndarray) -> None:
@@ -489,6 +497,8 @@ class ModernGLSceneRenderer:
         scene: Scene,
         preview: RenderPreview,
         view_projection: np.ndarray,
+        *,
+        depth_only: bool = False,
     ) -> None:
         definition = scene.piece_defs.get(preview.instance.piece_id)
         if definition is None:
@@ -520,12 +530,20 @@ class ModernGLSceneRenderer:
             # through the visible surface.
             self.context.cull_face = "back"
             self.context.enable(moderngl.CULL_FACE)
+            if depth_only:
+                self.context.disable(moderngl.BLEND)
+                self.context.color_mask = (False, False, False, False)
+                self.context.depth_mask = True
+                self.context.depth_func = "<="
+                mesh.preview_vao.render(moderngl.TRIANGLES, instances=1)
+                return
             self.context.enable(moderngl.BLEND)
             self.context.blend_func = (moderngl.SRC_ALPHA, moderngl.ONE_MINUS_SRC_ALPHA)
             self.context.depth_mask = False
             self.context.depth_func = "<="
             mesh.preview_vao.render(moderngl.TRIANGLES, instances=1)
         finally:
+            self.context.color_mask = (True, True, True, True)
             self.context.depth_func = "<"
             self.context.depth_mask = True
             self.context.disable(moderngl.BLEND)
@@ -800,6 +818,17 @@ def build_grid_lines(scene: Scene) -> np.ndarray:
     add((scene.max_x, 0.002, scene.min_z), (scene.max_x, 0.002, scene.max_z), border)
     add((scene.max_x, 0.002, scene.max_z), (scene.min_x, 0.002, scene.max_z), border)
     add((scene.min_x, 0.002, scene.max_z), (scene.min_x, 0.002, scene.min_z), border)
+
+    # Game-camera direction marker, outside the map at Z=30 and below ground.
+    arrow_y = -0.05
+    arrow_color = (1.0, 0.55, 0.08)
+    arrow_tip = (0.0, arrow_y, 26.0)
+    arrow_left = (-2.0, arrow_y, 30.0)
+    arrow_right = (2.0, arrow_y, 30.0)
+    add((0.0, arrow_y, 34.0), arrow_tip, arrow_color)
+    add(arrow_tip, arrow_left, arrow_color)
+    add(arrow_tip, arrow_right, arrow_color)
+    add(arrow_left, arrow_right, arrow_color)
     return np.asarray(lines, dtype=np.float32)
 
 

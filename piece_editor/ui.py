@@ -6,7 +6,7 @@ from pathlib import Path
 from PIL import Image
 from PIL.ImageQt import ImageQt
 from PySide6.QtCore import QSettings, QSize, QSignalBlocker, Qt, Signal
-from PySide6.QtGui import QAction, QColor, QDragEnterEvent, QDropEvent, QIcon, QKeySequence, QPixmap
+from PySide6.QtGui import QAction, QActionGroup, QColor, QDragEnterEvent, QDropEvent, QIcon, QKeySequence, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -39,7 +39,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .domain import DEFAULT_PALETTE, PaletteColor, PieceInstance, load_default_palette
+from .domain import DEFAULT_PALETTE, PALETTE_FILES, PaletteColor, PieceInstance, load_app_palette
 from .document import EditorDocument, EditorTool
 from .io import export_game, import_game_data, load_project_data, save_project
 from .library import PieceLibrary
@@ -51,6 +51,7 @@ from .viewport import EditorViewport, ViewMode
 
 
 UI_LAYOUT_VERSION = 2
+DEFAULT_PALETTE_KEY = "palette_1"
 
 
 class ReferenceDrop(QFrame):
@@ -363,24 +364,45 @@ class PropertiesPanel(QWidget):
 
 class PalettePanel(QWidget):
     color_selected = Signal(int)
+    columns_changed = Signal(int)
 
-    def __init__(self, palette: tuple[PaletteColor, ...]) -> None:
+    COLUMN_OPTIONS = (4, 6, 8, 10, 12, 14, 16)
+
+    def __init__(self, palette: tuple[PaletteColor, ...], columns: int = 8) -> None:
         super().__init__()
+        self.columns = columns if columns in self.COLUMN_OPTIONS else 8
         self.selected_color_id = palette[0].id if palette else -1
         self.buttons: dict[int, QPushButton] = {}
         outer = QVBoxLayout(self)
         outer.setContentsMargins(6, 6, 6, 4)
         outer.setSpacing(4)
-        outer.addWidget(QLabel("Palette"))
-        self.grid = QGridLayout()
+
+        header = QHBoxLayout()
+        header.addWidget(QLabel("Palette"))
+        header.addStretch()
+        self.columns_label = QLabel(str(self.columns))
+        self.columns_label.setMinimumWidth(18)
+        self.columns_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        header.addWidget(self.columns_label)
+        self.columns_slider = QSlider(Qt.Orientation.Horizontal)
+        self.columns_slider.setRange(0, len(self.COLUMN_OPTIONS) - 1)
+        self.columns_slider.setValue(self.COLUMN_OPTIONS.index(self.columns))
+        self.columns_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+        self.columns_slider.setTickInterval(1)
+        self.columns_slider.setFixedWidth(110)
+        self.columns_slider.setToolTip("Palette columns: 4, 6, 8, 10, 12, 14, 16")
+        self.columns_slider.valueChanged.connect(self._slider_changed)
+        header.addWidget(self.columns_slider)
+        outer.addLayout(header)
+
+        self.palette_clip = QWidget()
+        self.palette_clip.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.grid_content = QWidget(self.palette_clip)
+        self.grid = QGridLayout(self.grid_content)
         self.grid.setContentsMargins(0, 0, 0, 0)
         self.grid.setHorizontalSpacing(3)
         self.grid.setVerticalSpacing(3)
-        for column in range(8):
-            self.grid.setColumnStretch(column, 1)
-        for row in range(4):
-            self.grid.setRowStretch(row, 1)
-        outer.addLayout(self.grid)
+        outer.addWidget(self.palette_clip, 1)
         self.setMinimumHeight(90)
         self.set_palette(palette)
 
@@ -394,13 +416,40 @@ class PalettePanel(QWidget):
             self.selected_color_id = palette[0].id
         for index, color in enumerate(palette):
             button = QPushButton("")
-            button.setMinimumSize(12, 12)
-            button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+            button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
             button.setToolTip(f"{color.name} — ID {color.id} — {color.rgb}")
             button.clicked.connect(lambda checked=False, color_id=color.id: self._select_color(color_id))
             self.buttons[color.id] = button
-            self.grid.addWidget(button, index // 8, index % 8)
+            self.grid.addWidget(button, index // self.columns, index % self.columns)
         self._refresh_selection()
+        self._update_swatch_sizes()
+
+    def set_columns(self, columns: int) -> None:
+        if columns not in self.COLUMN_OPTIONS or columns == self.columns:
+            return
+        self.columns = columns
+        self.columns_label.setText(str(columns))
+        for index, button in enumerate(self.buttons.values()):
+            self.grid.addWidget(button, index // columns, index % columns)
+        self._update_swatch_sizes()
+        self.columns_changed.emit(columns)
+
+    def _slider_changed(self, index: int) -> None:
+        self.set_columns(self.COLUMN_OPTIONS[index])
+
+    def _update_swatch_sizes(self) -> None:
+        spacing = self.grid.horizontalSpacing()
+        width = max(0, self.palette_clip.width())
+        cell_size = max(1, (width - spacing * (self.columns - 1)) // self.columns)
+        for button in self.buttons.values():
+            button.setFixedSize(cell_size, cell_size)
+        rows = (len(self.buttons) + self.columns - 1) // self.columns
+        content_height = rows * cell_size + max(0, rows - 1) * self.grid.verticalSpacing()
+        self.grid_content.setGeometry(0, 0, width, content_height)
+
+    def resizeEvent(self, event) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        self._update_swatch_sizes()
 
     def _select_color(self, color_id: int) -> None:
         self.selected_color_id = color_id
@@ -704,7 +753,10 @@ class MainWindow(QMainWindow):
         self.resize(1600, 900)
         self.project_path: Path | None = None
         self.dirty = False
-        self.palette = DEFAULT_PALETTE
+        saved_palette_key = self.ui_settings.value("ui/palette", DEFAULT_PALETTE_KEY, type=str)
+        self.palette_key = saved_palette_key if saved_palette_key in PALETTE_FILES else DEFAULT_PALETTE_KEY
+        self.palette = load_app_palette(self.palette_key)
+        palette_columns = self.ui_settings.value("ui/palette_columns", 8, type=int)
         self.library_path = Path(library_path).resolve()
         self.library = PieceLibrary.load(self.library_path)
         self.scene = Scene(self.library.pieces)
@@ -719,8 +771,9 @@ class MainWindow(QMainWindow):
         self.library_panel.set_library(self.library)
         self.properties = PropertiesPanel(self.palette)
         self.properties.set_scene_bounds(self.scene)
-        self.palette_panel = PalettePanel(self.palette)
+        self.palette_panel = PalettePanel(self.palette, palette_columns)
         self.ai_panel = AIBuildPanel()
+        self.ai_panel.palette_size.setMaximum(len(self.palette))
         self.toolbox_panel = ToolboxPanel()
         self._build_toolbox()
         self._build_layout()
@@ -867,9 +920,22 @@ class MainWindow(QMainWindow):
         center = view_menu.addAction("Center Views", self._center_views)
         center.setShortcut(QKeySequence("H"))
 
+        palette_menu = self.menuBar().addMenu("&Palette")
+        self.palette_action_group = QActionGroup(self)
+        self.palette_action_group.setExclusive(True)
+        self.palette_actions: dict[str, QAction] = {}
+        for key, label in (("palette_1", "Palette 1 (32 colors)"), ("palette_2", "Palette 2 (64 colors)")):
+            action = palette_menu.addAction(label)
+            action.setCheckable(True)
+            action.setChecked(key == self.palette_key)
+            action.triggered.connect(lambda checked=False, selected=key: self._select_palette(selected))
+            self.palette_action_group.addAction(action)
+            self.palette_actions[key] = action
+
     def _connect(self) -> None:
         self.library_panel.piece_selected.connect(self._select_piece)
         self.palette_panel.color_selected.connect(self.viewport.recolor_selection)
+        self.palette_panel.columns_changed.connect(self._palette_columns_changed)
         self.properties.apply_requested.connect(lambda data: self.viewport.update_selected(**data))
         self.document.selection_changed.connect(self._selection_changed)
         self.document.scene_changed.connect(self._scene_changed)
@@ -881,6 +947,10 @@ class MainWindow(QMainWindow):
     def _set_tool(self, tool: EditorTool) -> None:
         self._sync_tool_buttons(tool)
         self.viewport.set_tool(tool)
+
+    def _palette_columns_changed(self, columns: int) -> None:
+        if self.persist_ui_state:
+            self.ui_settings.setValue("ui/palette_columns", columns)
 
     def _sync_tool_buttons(self, tool: object) -> None:
         selected_tool = tool if isinstance(tool, EditorTool) else self.document.tool
@@ -909,6 +979,29 @@ class MainWindow(QMainWindow):
     def _center_views(self) -> None:
         self.front_viewport.center_view()
         self.view3d.center_view()
+
+    def _select_palette(self, palette_key: str) -> None:
+        if palette_key not in PALETTE_FILES:
+            return
+        palette = load_app_palette(palette_key)
+        if palette == self.palette:
+            self.palette_key = palette_key
+            return
+        self.palette_key = palette_key
+        self._apply_palette(palette)
+        if self.persist_ui_state:
+            self.ui_settings.setValue("ui/palette", palette_key)
+        self.dirty = True
+        self._update_title()
+        self.statusBar().showMessage(f"Switched to {self.palette_actions[palette_key].text()}", 4000)
+
+    def _apply_palette(self, palette: tuple[PaletteColor, ...]) -> None:
+        self.palette = palette
+        self.palette_panel.set_palette(palette)
+        self.properties.set_palette(palette)
+        self.front_viewport.set_palette(palette)
+        self.view3d.set_palette(palette)
+        self.ai_panel.palette_size.setMaximum(len(palette))
 
     def _set_view_panel_visible(self, panel_name: str, visible: bool) -> None:
         if not hasattr(self, "front_panel"):
@@ -957,6 +1050,8 @@ class MainWindow(QMainWindow):
         self.ui_settings.setValue("ui/view_splitter", self.view_splitter.saveState())
         self.ui_settings.setValue("ui/front_panel_visible", self.front_panel.isVisible())
         self.ui_settings.setValue("ui/3d_panel_visible", self.view3d_panel.isVisible())
+        self.ui_settings.setValue("ui/palette", self.palette_key)
+        self.ui_settings.setValue("ui/palette_columns", self.palette_panel.columns)
         self.ui_settings.sync()
 
     def _update_title(self) -> None:
@@ -972,11 +1067,7 @@ class MainWindow(QMainWindow):
     def new_project(self) -> None:
         if not self._confirm_discard():
             return
-        self.palette = load_default_palette()
-        self.palette_panel.set_palette(self.palette)
-        self.properties.set_palette(self.palette)
-        self.front_viewport.set_palette(self.palette)
-        self.view3d.set_palette(self.palette)
+        self._apply_palette(load_app_palette(self.palette_key))
         self.scene = Scene(self.library.pieces)
         self.document.reset_scene(self.scene)
         if self.view3d.renderer3d:
@@ -1047,13 +1138,11 @@ class MainWindow(QMainWindow):
             return
         self.library = library
         self.library_path = library.root
-        self.palette = palette
         self.scene = scene
         self.library_panel.set_library(library)
-        self.palette_panel.set_palette(palette)
-        self.properties.set_palette(palette)
-        self.front_viewport.set_palette(palette)
-        self.view3d.set_palette(palette)
+        self._apply_palette(palette)
+        for key, action in self.palette_actions.items():
+            action.setChecked(palette == load_app_palette(key))
         self.document.reset_scene(scene)
         if self.view3d.renderer3d:
             self.view3d.renderer3d.reset_camera(scene)
